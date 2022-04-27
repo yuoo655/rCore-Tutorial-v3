@@ -106,7 +106,8 @@ pub fn stackless_coroutine_test() {
     let mut exec = Executor::new();
 
     for instance in 1..=3 {
-        exec.push(move |mut fib| async move {
+        exec.push(  move |mut fib| 
+            async move {
             println!("{} A", instance);
             fib.waiter().await;
             println!("{} B", instance);
@@ -114,7 +115,8 @@ pub fn stackless_coroutine_test() {
             println!("{} C", instance);
             fib.waiter().await;
             println!("{} D", instance);
-        });
+            }
+        );
     }
 
     println!("Running");
