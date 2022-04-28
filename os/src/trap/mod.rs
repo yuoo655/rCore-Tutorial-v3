@@ -13,6 +13,7 @@ use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
     sie, stval, stvec,
 };
+use riscv::register::sstatus::{self, Sstatus, SPP};
 
 global_asm!(include_str!("trap.S"));
 
@@ -96,14 +97,20 @@ pub fn trap_handler() -> ! {
 
 #[no_mangle]
 pub fn trap_return() -> ! {
+    let mut sstatus = sstatus::read();
+    let spp = sstatus.spp();
     set_user_trap_entry();
     let trap_cx_user_va = current_trap_cx_user_va();
     let user_satp = current_user_token();
+
+    #[no_mangle]
     extern "C" {
         fn __alltraps();
         fn __restore();
     }
+
     let restore_va = __restore as usize - __alltraps as usize + TRAMPOLINE;
+    // println!("restore_va = {:?}", restore_va);
     unsafe {
         asm!(
             "fence.i",

@@ -1,6 +1,6 @@
 use super::ProcessControlBlock;
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE};
-use crate::mm::{MapPermission, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, PhysPageNum, VirtAddr, KERNEL_SPACE, PhysAddr};
 use crate::sync::UPSafeCell;
 use alloc::{
     sync::{Arc, Weak},
@@ -70,6 +70,7 @@ pub struct KernelStack(pub usize);
 pub fn kstack_alloc() -> KernelStack {
     let kstack_id = KSTACK_ALLOCATOR.exclusive_access().alloc();
     let (kstack_bottom, kstack_top) = kernel_stack_position(kstack_id);
+    println!("kstack_alloc  kstack_bottom: {:#x?}, kstack_top: {:#x?}", kstack_bottom, kstack_top);
     KERNEL_SPACE.exclusive_access().insert_framed_area(
         kstack_bottom.into(),
         kstack_top.into(),
@@ -82,9 +83,11 @@ impl Drop for KernelStack {
     fn drop(&mut self) {
         let (kernel_stack_bottom, _) = kernel_stack_position(self.0);
         let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
-        KERNEL_SPACE
-            .exclusive_access()
-            .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
+        let kernel_stack_bottom_pa: PhysAddr = kernel_stack_bottom.into();
+        println!("kstack_drop  kstack_bottom: {:#x?}", kernel_stack_bottom_pa);
+        // KERNEL_SPACE
+        //     .exclusive_access()
+        //     .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
     }
 }
 
@@ -103,6 +106,7 @@ impl KernelStack {
     }
     pub fn get_top(&self) -> usize {
         let (_, kernel_stack_top) = kernel_stack_position(self.0);
+        println!("kernel stack top: {:#x?}", kernel_stack_top);
         kernel_stack_top
     }
 }
@@ -219,5 +223,47 @@ impl Drop for TaskUserRes {
     fn drop(&mut self) {
         self.dealloc_tid();
         self.dealloc_user_res();
+    }
+}
+
+
+
+
+
+use alloc::alloc::{alloc, dealloc, Layout};
+
+#[derive(Clone)]
+pub struct KStack(usize);
+
+const STACK_SIZE: usize = 0x8000;
+
+impl KStack {
+    pub fn new() -> KStack {
+        let bottom =
+            unsafe {
+                alloc(Layout::from_size_align(STACK_SIZE, STACK_SIZE).unwrap())
+            } as usize;
+        KStack(bottom)
+    }
+
+    pub fn top(&self) -> usize {
+        self.0 + STACK_SIZE
+    }
+}
+use core::fmt::{self, Debug, Formatter};
+impl Debug for KStack {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("KStack:{:#x}", self.0))
+    }
+}
+
+impl Drop for KStack {
+    fn drop(&mut self) {
+        unsafe {
+            dealloc(
+                self.0 as _,
+                Layout::from_size_align(STACK_SIZE, STACK_SIZE).unwrap()
+            );
+        }
     }
 }

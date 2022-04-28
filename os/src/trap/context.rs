@@ -33,7 +33,33 @@ impl TrapContext {
             kernel_sp,
             trap_handler,
         };
+        println!("app_init_context :{:#x?}", entry);
         cx.set_sp(sp);
+        cx
+    }
+
+
+    pub fn kernel_init_context(entry: usize, sp:usize) -> Self {
+        use crate::mm::kernel_token;
+        use crate::trap::trap_handler;
+    
+        let mut sstatus = sstatus::read();
+        sstatus.set_spp(SPP::Supervisor);
+
+        let kernel_satp = kernel_token();
+        let kernel_sp = sp;
+
+        let mut cx = Self {
+            x: [0; 32],
+            sstatus,
+            sepc: entry,
+            kernel_satp,
+            kernel_sp,
+            trap_handler: trap_handler as usize,
+        };
+        println!("kernel_init_context :{:#x?}", entry);
+        cx.set_sp(sp);
+        println!("task cx: {:x?}",cx);
         cx
     }
 }

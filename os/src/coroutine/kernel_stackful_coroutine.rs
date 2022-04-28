@@ -1,0 +1,88 @@
+use crate::task::{
+    TaskControlBlock
+};
+use crate::task::add_task;
+use alloc::sync::Arc;
+use crate::trap::TrapContext;
+use crate::task::PROCESSOR;
+
+
+use crate::task::{
+    exit_kthread_and_run_next,
+    exit_current_and_run_next,
+};
+
+#[no_mangle]
+pub fn kthread_create(f: fn()) {
+
+    println!("kthread_create");
+    //创建内核线程
+    let new_tcb = TaskControlBlock::create_kthread(f);
+    let kernel_stack = new_tcb.get_kernel_stack();
+    let new_task = Arc::new(new_tcb);
+
+    //往调度器加任务,与用户线程放在一起调度.
+    // println!("add task");
+    add_task(Arc::clone(&new_task));
+
+    let new_task_inner = new_task.inner_exclusive_access();
+    let new_task_trap_cx = new_task_inner.get_trap_cx();
+
+    *new_task_trap_cx = TrapContext::kernel_init_context(
+        f as usize,
+        kernel_stack,
+    );
+}
+
+
+#[no_mangle]
+pub fn kernel_stackful_coroutine_test() {
+    println!("kernel_stackful_coroutine_test");
+    kthread_create( ||
+        {
+            let id = 1;
+            println!("THREAD {:?} STARTING", id);
+            for i in 0..10 {
+                println!("thread: {} counter: {}", id, i);
+            }
+            println!("THREAD {:?} FINISHED", id);
+            kthread_stop();
+        }
+    );
+
+    kthread_create( ||
+        {
+            let id = 2;
+            println!("THREAD {:?} STARTING", id);
+            for i in 0..10 {
+                println!("thread: {} counter: {}", id, i);
+            }
+            println!("THREAD {:?} FINISHED", id);
+            kthread_stop();
+        }
+    );
+
+
+    kthread_create( ||
+        {
+            let id = 3;
+            println!("THREAD {:?} STARTING", id);
+            for i in 0..10 {
+                println!("thread: {} counter: {}", id, i);
+            }
+            println!("THREAD {:?} FINISHED", id);
+            kthread_stop();
+        }
+    );
+}
+
+pub fn kthread_stop(){
+    do_exit();
+}
+#[no_mangle]
+pub fn do_exit(){
+    println!("kthread do exit");
+    exit_kthread_and_run_next(0);
+    // exit_current_and_run_next(0);
+    panic!("Unreachable in sys_exit!");
+}

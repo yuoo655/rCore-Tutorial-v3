@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
+#![feature(naked_functions)]
 
 extern crate alloc;
 
@@ -28,8 +29,11 @@ mod syscall;
 mod task;
 mod timer;
 mod trap;
+mod coroutine;
 
 use core::arch::global_asm;
+
+use crate::coroutine::kernel_stackful_coroutine_test;
 
 global_asm!(include_str!("entry.asm"));
 
@@ -54,6 +58,7 @@ pub fn rust_main() -> ! {
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     fs::list_apps();
+    coroutine::kernel_stackful_coroutine_test();
     task::add_initproc();
     task::run_tasks();
     panic!("Unreachable in rust_main!");

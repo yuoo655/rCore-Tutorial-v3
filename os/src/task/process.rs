@@ -113,7 +113,7 @@ impl ProcessControlBlock {
         let task_inner = task.inner_exclusive_access();
         let trap_cx = task_inner.get_trap_cx();
         let ustack_top = task_inner.res.as_ref().unwrap().ustack_top();
-        let kstack_top = task.kstack.get_top();
+        let kstack_top = task.kstack;
         drop(task_inner);
         *trap_cx = TrapContext::app_init_context(
             entry_point,
@@ -177,7 +177,7 @@ impl ProcessControlBlock {
             entry_point,
             user_sp,
             KERNEL_SPACE.exclusive_access().token(),
-            task.kstack.get_top(),
+            task.kstack,
             trap_handler as usize,
         );
         trap_cx.x[10] = args.len();
@@ -245,7 +245,7 @@ impl ProcessControlBlock {
         // modify kstack_top in trap_cx of this thread
         let task_inner = task.inner_exclusive_access();
         let trap_cx = task_inner.get_trap_cx();
-        trap_cx.kernel_sp = task.kstack.get_top();
+        trap_cx.kernel_sp = task.kstack;
         drop(task_inner);
         insert_into_pid2process(child.getpid(), Arc::clone(&child));
         // add this thread to scheduler
@@ -255,5 +255,31 @@ impl ProcessControlBlock {
 
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+
+    pub fn kernel_process() -> Arc<Self>{
+        let memory_set = MemorySet::kernel_copy();
+        let process = Arc::new(
+            ProcessControlBlock {
+                pid: super::pid_alloc(),
+                inner: unsafe {
+                    UPSafeCell::new(
+                        ProcessControlBlockInner {
+                        is_zombie: false,
+                        memory_set: memory_set,
+                        parent: None,
+                        children: Vec::new(),
+                        exit_code: 0,
+                        fd_table: Vec::new(),
+                        signals: SignalFlags::empty(),
+                        tasks: Vec::new(),
+                        task_res_allocator: RecycleAllocator::new(),
+                        mutex_list: Vec::new(),
+                        semaphore_list: Vec::new(),
+                        condvar_list: Vec::new(),
+                    })
+               },
+        });
+        process
     }
 }
