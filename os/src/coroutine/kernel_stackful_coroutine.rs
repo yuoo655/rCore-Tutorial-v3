@@ -16,6 +16,7 @@ use crate::task::{
 pub fn kthread_create(f: fn()) {
 
     println!("kthread_create");
+    
     //创建内核线程
     let new_tcb = TaskControlBlock::create_kthread(f);
     let kernel_stack = new_tcb.get_kernel_stack();

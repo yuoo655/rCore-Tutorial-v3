@@ -80,11 +80,9 @@ impl TaskControlBlock {
         use crate::mm::{KERNEL_SPACE, PhysPageNum, VirtAddr, PhysAddr};
         let process = ProcessControlBlock::kernel_process();
         let process = Arc::downgrade(&process);
-
+        
         let kstack = kstack_alloc();
-
         let kernelstack = crate::task::id::KStack::new();
-
         let kstack_top = kernelstack.top();
 
         let mut context = TaskContext::kthread_init();

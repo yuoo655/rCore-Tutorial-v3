@@ -22,6 +22,7 @@ impl TrapContext {
         kernel_sp: usize,
         trap_handler: usize,
     ) -> Self {
+        
         let mut sstatus = sstatus::read();
         // set CPU privilege to User after trapping back
         sstatus.set_spp(SPP::User);
@@ -57,9 +58,10 @@ impl TrapContext {
             kernel_sp,
             trap_handler: trap_handler as usize,
         };
-        println!("kernel_init_context :{:#x?}", entry);
         cx.set_sp(sp);
-        println!("task cx: {:x?}",cx);
+
+        println!("kthread trap context addr:{:#x?}", entry);
+        println!("kthread cx: {:x?}",cx);
         cx
     }
 }

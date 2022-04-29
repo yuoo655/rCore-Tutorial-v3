@@ -85,9 +85,9 @@ impl Drop for KernelStack {
         let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
         let kernel_stack_bottom_pa: PhysAddr = kernel_stack_bottom.into();
         println!("kstack_drop  kstack_bottom: {:#x?}", kernel_stack_bottom_pa);
-        // KERNEL_SPACE
-        //     .exclusive_access()
-        //     .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
+        KERNEL_SPACE
+            .exclusive_access()
+            .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
     }
 }
 
