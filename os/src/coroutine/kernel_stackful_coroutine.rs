@@ -9,7 +9,7 @@ use crate::task::PROCESSOR;
 
 use crate::task::{
     exit_kthread_and_run_next,
-    exit_current_and_run_next,
+    suspend_current_and_run_next,
 };
 
 #[no_mangle]
@@ -42,36 +42,23 @@ pub fn kernel_stackful_coroutine_test() {
     kthread_create( ||
         {
             let id = 1;
-            println!("THREAD {:?} STARTING", id);
+            println!("kernel thread {:?} STARTING", id);
             for i in 0..10 {
-                println!("thread: {} counter: {}", id, i);
+                println!("kernel thread: {} counter: {}", id, i);
             }
-            println!("THREAD {:?} FINISHED", id);
+            println!("kernel thread {:?} FINISHED", id);
             kthread_stop();
         }
     );
-
     kthread_create( ||
         {
             let id = 2;
-            println!("THREAD {:?} STARTING", id);
+            println!("kernel thread {:?} STARTING", 2);
             for i in 0..10 {
-                println!("thread: {} counter: {}", id, i);
+                println!("kernel thread: {} counter: {}", 2, i);
+                kthread_yield();
             }
-            println!("THREAD {:?} FINISHED", id);
-            kthread_stop();
-        }
-    );
-
-
-    kthread_create( ||
-        {
-            let id = 3;
-            println!("THREAD {:?} STARTING", id);
-            for i in 0..10 {
-                println!("thread: {} counter: {}", id, i);
-            }
-            println!("THREAD {:?} FINISHED", id);
+            println!("kernel thread {:?} FINISHED", 2);
             kthread_stop();
         }
     );
@@ -84,6 +71,9 @@ pub fn kthread_stop(){
 pub fn do_exit(){
     println!("kthread do exit");
     exit_kthread_and_run_next(0);
-    // exit_current_and_run_next(0);
     panic!("Unreachable in sys_exit!");
+}
+
+pub fn kthread_yield(){
+    suspend_current_and_run_next();
 }
