@@ -17,3 +17,6 @@ easy-fs-fuse/target/*
 tools/
 pushall.sh
 *.bak
+1.py
+2.py
+os/.vscode

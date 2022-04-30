@@ -27,6 +27,37 @@ fn sbi_call(which: usize, arg0: usize, arg1: usize, arg2: usize) -> usize {
     ret
 }
 
+#[repr(C)]
+pub struct SbiRet {
+    /// Error number
+    pub error: usize,
+    /// Result value
+    pub value: usize,
+}
+
+#[inline(always)]
+fn sbi_call_2(extension: usize, function: usize, arg0: usize, arg1: usize) -> SbiRet {
+    let (error, value);
+    match () {
+        #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+        () => unsafe {
+            asm!(
+                "ecall",
+                in("a0") arg0, in("a1") arg1,
+                in("a6") function, in("a7") extension,
+                lateout("a0") error, lateout("a1") value,
+            )
+        },
+        #[cfg(not(any(target_arch = "riscv32", target_arch = "riscv64")))]
+        () => {
+            drop((extension, function, arg0, arg1));
+            unimplemented!("not RISC-V instruction set architecture")
+        }
+    };
+    SbiRet { error, value }
+}
+
+
 /// use sbi call to putchar in console (qemu uart handler)
 pub fn console_putchar(c: usize) {
     sbi_call(SBI_CONSOLE_PUTCHAR, c, 0, 0);
