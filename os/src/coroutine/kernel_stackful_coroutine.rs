@@ -29,10 +29,6 @@ pub fn kthread_create(f: fn()) {
     let new_task_inner = new_task.inner_exclusive_access();
     let new_task_trap_cx = new_task_inner.get_trap_cx();
 
-    *new_task_trap_cx = TrapContext::kernel_init_context(
-        f as usize,
-        kernel_stack,
-    );
 }
 
 
