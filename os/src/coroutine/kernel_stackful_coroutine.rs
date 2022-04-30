@@ -25,10 +25,6 @@ pub fn kthread_create(f: fn()) {
     //往调度器加任务,与用户线程放在一起调度.
     // println!("add task");
     add_task(Arc::clone(&new_task));
-
-    let new_task_inner = new_task.inner_exclusive_access();
-    let new_task_trap_cx = new_task_inner.get_trap_cx();
-
 }
 
 
