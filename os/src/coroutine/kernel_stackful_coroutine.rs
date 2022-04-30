@@ -62,6 +62,18 @@ pub fn kernel_stackful_coroutine_test() {
             kthread_stop();
         }
     );
+    kthread_create( ||
+        {
+            let id = 3;
+            println!("kernel thread {:?} STARTING", 3);
+            for i in 0..10 {
+                println!("kernel thread: {} counter: {}", 3, i);
+                kthread_yield();
+            }
+            println!("kernel thread {:?} FINISHED", 3);
+            kthread_stop();
+        }
+    );
 }
 
 pub fn kthread_stop(){
