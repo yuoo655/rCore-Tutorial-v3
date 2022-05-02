@@ -60,7 +60,6 @@ pub fn rust_main(hart_id: usize) -> ! {
         }
         clear_bss();
         logging::init();
-        println!("hart[{:?}] Hello, world!", hart_id);
         println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
         println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
         println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
@@ -69,7 +68,8 @@ pub fn rust_main(hart_id: usize) -> ! {
             boot_stack as usize, boot_stack_top as usize
         );
         println!(".bss [{:#x}, {:#x})", sbss as usize, ebss as usize);
-
+        
+        println!("hart[{:?}] Hello, world!", hart_id);
 
         unsafe {
             let sp: usize;
