@@ -60,8 +60,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         }
         clear_bss();
         logging::init();
-        
-        println!("Hello, world!");
+        println!("hart[{:?}] Hello, world!", hart_id);
         println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
         println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
         println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
@@ -87,8 +86,7 @@ pub fn rust_main(hart_id: usize) -> ! {
     loop {
         spin_loop();
     }
-    panic!("Shutdown machine!");
-
+    // panic!("Shutdown machine!");
 }
 
 pub fn init_other_cpu(){
@@ -102,18 +100,26 @@ pub fn init_other_cpu(){
             let sp: usize;
             asm!("mv {}, sp", out(reg) sp);
             println!("hart[{:?}] init done sp:{:x?}", hart_id,  sp);
+            println!("hart[{:?}] Hello, world!", hart_id);
         }
     }
 }
 
 pub fn others_main(){
     clear_bss();
-    println!("hard[{:?}] initializing (do nothing)", hart_id());
+    println!("hard[{:?}] initializing (clear bss)", hart_id());
 }
 
 pub fn send_ipi(){
-}
+    //rCore-tutorial目前的rustsbi版本为0.2.0-alpha.6 所有核一次启动了,不需要再发送ipi
 
+    // let hart_id = hart_id();
+    // for i in 1..4 {
+    //     debug!("[hart {}] Start hart[{}]", hart_id, i);
+    //     let mask: usize = 1 << i;
+    //     sbi::send_ipi(&mask as *const _ as usize);
+    // }
+}
 pub fn hart_id() -> usize {
     let hart_id: usize;
     unsafe {
