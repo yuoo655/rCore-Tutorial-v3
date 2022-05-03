@@ -15,11 +15,12 @@
 //! We then call [`task::run_first_task()`] and for the first time go to
 //! userspace.
 
-#![deny(missing_docs)]
-#![deny(warnings)]
+// #![deny(missing_docs)]
+// #![deny(warnings)]
 #![no_std]
 #![no_main]
 #![feature(panic_info_message)]
+#![feature(alloc_error_handler)]
 
 use core::arch::global_asm;
 
@@ -29,8 +30,14 @@ mod board;
 #[cfg(not(any(feature = "board_k210")))]
 #[path = "boards/qemu.rs"]
 mod board;
+
+#[macro_use]
+extern crate log;
 #[macro_use]
 mod console;
+#[macro_use]
+mod logging;
+
 mod config;
 mod lang_items;
 mod loader;
@@ -40,9 +47,16 @@ pub mod syscall;
 pub mod task;
 mod timer;
 pub mod trap;
+mod mm;
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("link_app.S"));
+
+use core::sync::atomic::{AtomicBool, Ordering};
+use core::hint::{spin_loop};
+use core::arch::asm;
+
+extern crate alloc;
 
 /// clear BSS segment
 fn clear_bss() {
@@ -56,15 +70,67 @@ fn clear_bss() {
     }
 }
 
+static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
+
 /// the rust entry-point of os
 #[no_mangle]
-pub fn rust_main() -> ! {
-    clear_bss();
-    println!("[kernel] Hello, world!");
-    trap::init();
-    loader::load_apps();
-    trap::enable_timer_interrupt();
-    timer::set_next_trigger();
-    task::run_first_task();
+pub fn rust_main(hard_id : usize) -> ! {
+
+    if hard_id == 0{
+        clear_bss();
+        unsafe{
+            mm::init_heap_allocator();
+        }
+        logging::init();
+        println!("hart [{:?}] [kernel] Hello, world!", hard_id);
+        trap::init();
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();    
+        loader::load_apps();
+        task::add_user_tasks();
+
+        // AP_CAN_INIT.store(true, Ordering::Relaxed);
+    }else {
+        init_other_cpu();
+    }
+
+    task::run_tasks();
     panic!("Unreachable in rust_main!");
+}
+
+/// initialize the other cpu
+pub fn init_other_cpu(){
+    let hart_id = hart_id();
+    if hart_id != 0 {
+        // while !AP_CAN_INIT.load(Ordering::Relaxed) {
+        //     // spin_loop();
+        // }
+        others_main();
+        unsafe {
+            let sp: usize;
+            asm!("mv {}, sp", out(reg) sp);
+            println!("hart[{:?}] init done sp:{:x?}", hart_id,  sp);
+        }
+    }
+}
+
+/// initialize the other cpu main procedure
+pub fn others_main(){
+    clear_bss();
+    unsafe{
+        mm::init_heap_allocator();
+    }
+    trap::init();
+    trap::enable_timer_interrupt();
+    println!("hard[{:?}] initializing", hart_id());
+}
+
+
+/// Get current cpu id
+pub fn hart_id() -> usize {
+    let hart_id: usize;
+    unsafe {
+        asm!("mv {}, tp", out(reg) hart_id);
+    }
+    hart_id
 }

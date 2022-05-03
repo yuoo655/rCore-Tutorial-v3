@@ -1,7 +1,7 @@
 //! Implementation of [`TaskContext`]
 
 /// Task Context
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct TaskContext {
     /// return address ( e.g. __restore ) of __switch ASM function
@@ -30,6 +30,15 @@ impl TaskContext {
         Self {
             ra: __restore as usize,
             sp: kstack_ptr,
+            s: [0; 12],
+        }
+    }
+}
+impl Default for TaskContext {
+    fn default() -> Self {
+        Self {
+            ra: 0,
+            sp: 0,
             s: [0; 12],
         }
     }

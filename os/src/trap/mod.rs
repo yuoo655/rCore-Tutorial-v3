@@ -77,3 +77,14 @@ pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
 }
 
 pub use context::TrapContext;
+
+use core::arch::asm;
+
+/// Get current cpu id
+pub fn hart_id() -> usize {
+    let hart_id: usize;
+    unsafe {
+        asm!("mv {}, tp", out(reg) hart_id);
+    }
+    hart_id
+}

@@ -6,6 +6,8 @@ extern crate user_lib;
 
 const LEN: usize = 100;
 
+use core::arch::asm;
+
 #[no_mangle]
 fn main() -> i32 {
     let p = 7u64;
@@ -19,10 +21,18 @@ fn main() -> i32 {
         s[next] = s[cur] * p % m;
         cur = next;
         if i % 10000 == 0 {
-            println!("power_7 [{}/{}]", i, iter);
+            println!("[hart {}] power_7 [{}/{}]",hart_id(), i, iter);
         }
     }
-    println!("{}^{} = {}(MOD {})", p, iter, s[cur], m);
-    println!("Test power_7 OK!");
+    println!("[hart {}] {}^{} = {}(MOD {})",hart_id(), p, iter, s[cur], m);
+    println!("[hart {}] Test power_7 OK!", hart_id());
     0
+}
+/// Get current cpu id
+pub fn hart_id() -> usize {
+    let hart_id: usize;
+    unsafe {
+        asm!("mv {}, tp", out(reg) hart_id);
+    }
+    hart_id
 }
