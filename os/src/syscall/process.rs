@@ -1,8 +1,9 @@
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_ref, translated_refmut, translated_str};
 use crate::task::{
-    add_task, current_task, current_user_token, exit_current_and_run_next, pid2task,
-    suspend_current_and_run_next, SignalFlags, SignalAction, MAX_SIG,
+    current_task, current_user_token, exit_current_and_run_next,
+    suspend_current_and_run_next, SignalFlags, SignalAction, MAX_SIG, add_task_first_time,
+    pid2task
 };
 use crate::timer::get_time_ms;
 use alloc::string::String;
@@ -32,12 +33,12 @@ pub fn sys_fork() -> isize {
     let new_task = current_task.fork();
     let new_pid = new_task.pid.0;
     // modify trap context of new_task, because it returns immediately after switching
-    let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+    let trap_cx = new_task.acquire_inner_lock().get_trap_cx();
     // we do not have to move to next instruction since we have done it before
     // for child process, fork returns 0
     trap_cx.x[10] = 0;
     // add new task to scheduler
-    add_task(new_task);
+    add_task_first_time(new_task);
     new_pid as isize
 }
 
@@ -74,7 +75,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     // find a child process
 
     // ---- access current PCB exclusively
-    let mut inner = task.inner_exclusive_access();
+    let mut inner = task.acquire_inner_lock();
     if !inner
         .children
         .iter()
@@ -85,7 +86,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     }
     let pair = inner.children.iter().enumerate().find(|(_, p)| {
         // ++++ temporarily access child PCB exclusively
-        p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid())
+        p.acquire_inner_lock().is_zombie() && (pid == -1 || pid as usize == p.getpid())
         // ++++ release child PCB
     });
     if let Some((idx, _)) = pair {
@@ -94,7 +95,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         assert_eq!(Arc::strong_count(&child), 1);
         let found_pid = child.getpid();
         // ++++ temporarily access child PCB exclusively
-        let exit_code = child.inner_exclusive_access().exit_code;
+        let exit_code = child.acquire_inner_lock().exit_code;
         // ++++ release child PCB
         *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
         found_pid as isize
@@ -108,7 +109,7 @@ pub fn sys_kill(pid: usize, signum: i32) -> isize {
     if let Some(task) = pid2task(pid) {
         if let Some(flag) = SignalFlags::from_bits(1 << signum) {
             // insert the signal if legal
-            let mut task_ref = task.inner_exclusive_access();
+            let mut task_ref = task.acquire_inner_lock();
             if task_ref.signals.contains(flag) {
                 return -1;
             }
@@ -124,7 +125,7 @@ pub fn sys_kill(pid: usize, signum: i32) -> isize {
 
 pub fn sys_sigprocmask(mask: u32) -> isize {
     if let Some(task) = current_task() {
-        let mut inner = task.inner_exclusive_access();
+        let mut inner = task.acquire_inner_lock();
         let old_mask = inner.signal_mask;
         if let Some(flag) = SignalFlags::from_bits(mask) {
             inner.signal_mask = flag;
@@ -139,7 +140,7 @@ pub fn sys_sigprocmask(mask: u32) -> isize {
 
 pub fn sys_sigretrun() -> isize {
     if let Some(task) = current_task() {
-        let mut inner = task.inner_exclusive_access();
+        let mut inner = task.acquire_inner_lock();
         inner.handling_sig = -1;
         // restore the trap context
         let trap_ctx = inner.get_trap_cx();
@@ -162,7 +163,7 @@ fn check_sigaction_error(signal: SignalFlags, action: usize, old_action: usize) 
 pub fn sys_sigaction(signum: i32, action: *const SignalAction, old_action: *mut SignalAction) -> isize {
     let token = current_user_token();
     if let Some(task) = current_task() {
-        let mut inner = task.inner_exclusive_access();
+        let mut inner = task.acquire_inner_lock();
         if signum as usize > MAX_SIG {
             return -1;
         }

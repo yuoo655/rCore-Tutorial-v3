@@ -13,9 +13,12 @@ static TESTS: &[&str] = &[
     "hello_world\0",
     "matrix\0",
     "sleep\0",
-    "sleep_simple\0",
-    "stack_overflow\0",
     "yield\0",
+    "pipetest\0",
+    "matrix\0",
+    "sig_tests\0",
+    "huge_write\0",
+    "pipe_large_test\0",
 ];
 
 use user_lib::{exec, fork, waitpid};
