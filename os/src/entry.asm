@@ -10,8 +10,6 @@ _start:
     add sp, sp, t0  # sp = sp + t0
     call rust_main
     
-    call rust_main
-
     .section .bss.stack
     .globl boot_stack
 boot_stack:
