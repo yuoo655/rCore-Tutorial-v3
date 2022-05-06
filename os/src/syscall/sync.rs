@@ -1,5 +1,5 @@
 use crate::sync::{Condvar, Mutex, MutexBlocking, MutexSpin, Semaphore};
-use crate::task::{block_current_and_run_next, current_process, current_task};
+use crate::task::{block_current_and_run_next, current_task};
 use crate::timer::{add_timer, get_time_ms};
 use alloc::sync::Arc;
 
@@ -12,7 +12,7 @@ pub fn sys_sleep(ms: usize) -> isize {
 }
 
 pub fn sys_mutex_create(blocking: bool) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let mutex: Option<Arc<dyn Mutex>> = if !blocking {
         Some(Arc::new(MutexSpin::new()))
     } else {
@@ -35,7 +35,7 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
 }
 
 pub fn sys_mutex_lock(mutex_id: usize) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let process_inner = process.inner_exclusive_access();
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
     drop(process_inner);
@@ -45,7 +45,7 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
 }
 
 pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let process_inner = process.inner_exclusive_access();
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
     drop(process_inner);
@@ -55,7 +55,7 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
 }
 
 pub fn sys_semaphore_create(res_count: usize) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let mut process_inner = process.inner_exclusive_access();
     let id = if let Some(id) = process_inner
         .semaphore_list
@@ -76,7 +76,7 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
 }
 
 pub fn sys_semaphore_up(sem_id: usize) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let process_inner = process.inner_exclusive_access();
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
@@ -85,7 +85,7 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
 }
 
 pub fn sys_semaphore_down(sem_id: usize) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let process_inner = process.inner_exclusive_access();
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
@@ -94,7 +94,7 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
 }
 
 pub fn sys_condvar_create(_arg: usize) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let mut process_inner = process.inner_exclusive_access();
     let id = if let Some(id) = process_inner
         .condvar_list
@@ -115,7 +115,7 @@ pub fn sys_condvar_create(_arg: usize) -> isize {
 }
 
 pub fn sys_condvar_signal(condvar_id: usize) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let process_inner = process.inner_exclusive_access();
     let condvar = Arc::clone(process_inner.condvar_list[condvar_id].as_ref().unwrap());
     drop(process_inner);
@@ -124,7 +124,7 @@ pub fn sys_condvar_signal(condvar_id: usize) -> isize {
 }
 
 pub fn sys_condvar_wait(condvar_id: usize, mutex_id: usize) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let process_inner = process.inner_exclusive_access();
     let condvar = Arc::clone(process_inner.condvar_list[condvar_id].as_ref().unwrap());
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());

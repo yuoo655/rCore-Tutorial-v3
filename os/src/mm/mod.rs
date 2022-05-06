@@ -15,8 +15,14 @@ pub use page_table::{
     PageTableEntry, UserBuffer, UserBufferIterator,
 };
 
+
 pub fn init() {
     heap_allocator::init_heap();
     frame_allocator::init_frame_allocator();
+    KERNEL_SPACE.exclusive_access().activate();
+}
+
+
+pub fn init_kernel_space() {
     KERNEL_SPACE.exclusive_access().activate();
 }

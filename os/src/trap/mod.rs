@@ -1,19 +1,18 @@
 mod context;
 
-use crate::config::TRAMPOLINE;
+use crate::config::{TRAMPOLINE, TRAP_CONTEXT};
 use crate::syscall::syscall;
 use crate::task::{
-    check_signals_of_current, current_add_signal, current_trap_cx, current_trap_cx_user_va,
-    current_user_token, exit_current_and_run_next, suspend_current_and_run_next, SignalFlags,
+    check_signals_error_of_current, current_add_signal, current_trap_cx, current_user_token,
+    exit_current_and_run_next, suspend_current_and_run_next, SignalFlags, handle_signals,
 };
 use crate::timer::{check_timer, set_next_trigger};
 use core::arch::{asm, global_asm};
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
-    sie, stval, stvec,
+    sie, stval, stvec,sstatus,
 };
-use riscv::register::sstatus::{self, Sstatus, SPP};
 
 global_asm!(include_str!("trap.S"));
 
@@ -48,7 +47,7 @@ pub fn trap_handler() -> ! {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
-            cx.sepc += 4;
+            cx.sepc += 4;        
             // get system call return value
             let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
             // cx is changed during sys_exec, so we have to call it again
@@ -87,8 +86,11 @@ pub fn trap_handler() -> ! {
             );
         }
     }
-    // check signals
-    if let Some((errno, msg)) = check_signals_of_current() {
+    // handle signals (handle the sent signal)
+    handle_signals();
+
+    // check error signals (if error then exit)
+    if let Some((errno, msg)) = check_signals_error_of_current() {
         println!("[kernel] {}", msg);
         exit_current_and_run_next(errno);
     }
@@ -97,26 +99,25 @@ pub fn trap_handler() -> ! {
 
 #[no_mangle]
 pub fn trap_return() -> ! {
-    let mut sstatus = sstatus::read();
-    let spp = sstatus.spp();
+    unsafe {
+        sstatus::clear_sie();
+    }
     set_user_trap_entry();
-    let trap_cx_user_va = current_trap_cx_user_va();
+    let trap_cx_ptr = TRAP_CONTEXT;
     let user_satp = current_user_token();
-
-    #[no_mangle]
     extern "C" {
         fn __alltraps();
         fn __restore();
     }
-
     let restore_va = __restore as usize - __alltraps as usize + TRAMPOLINE;
-    // println!("restore_va = {:?}", restore_va);
     unsafe {
+        sstatus::set_spie();
+        sstatus::set_spp(sstatus::SPP::User);
         asm!(
             "fence.i",
             "jr {restore_va}",
             restore_va = in(reg) restore_va,
-            in("a0") trap_cx_user_va,
+            in("a0") trap_cx_ptr,
             in("a1") user_satp,
             options(noreturn)
         );

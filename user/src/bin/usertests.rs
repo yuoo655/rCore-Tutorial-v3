@@ -5,17 +5,21 @@
 extern crate user_lib;
 
 static TESTS: &[&str] = &[
+    "hello_world\0",
+    "yield\0",
     "exit\0",
     "fantastic_text\0",
-    "forktest\0",
-    "forktest2\0",
-    "forktest_simple\0",
-    "hello_world\0",
     "matrix\0",
+    "forktest\0",
+    "forktest_simple\0",
     "sleep\0",
     "sleep_simple\0",
-    "stack_overflow\0",
-    "yield\0",
+    "forktest2\0",
+    "pipetest\0",
+    "green_threads\0",
+    "huge_write\0",
+    "pipe_large_test\0",
+    "pipetest\0",
 ];
 
 use user_lib::{exec, fork, waitpid};
