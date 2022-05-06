@@ -30,20 +30,23 @@ pub fn sys_gettid() -> isize {
 /// otherwise, return thread's exit code
 pub fn sys_waittid(tid: usize) -> i32 {
     let task = current_task().unwrap();
-
-    // a thread cannot wait for itself
-    if task.pid.0 == task.tgid {
+    let tgid = task.tgid;
+    let pid = task.pid.0;
+    let waited_task = pid2task(tid);
+    if pid == tgid {
         return -1;
     }
+
     let mut exit_code: Option<i32> = None;
-
-    if let Some(waited_task) = pid2task(tid) {
-        if let Some(waited_exit_code) = waited_task.inner_exclusive_access().exit_code {
-            exit_code = Some(waited_exit_code);
-        }
-    } else {
-        // waited thread does not exist
+    if let Some(exitcode) = waited_task.unwrap().inner_exclusive_access().exit_code {
+        exit_code = Some(exitcode);
+    }else {
         return -1;
     }
-    1
+    if let Some(exit_code) = exit_code {
+        exit_code
+    }else{
+        -2
+    }
+
 }

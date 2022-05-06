@@ -92,23 +92,23 @@ impl Processor {
     #[no_mangle]
     pub fn run(&self) {
         loop {
-            let task = fetch_task();
-                
-                match task {
-                    Some(task) => {
-                        unsafe { riscv::asm::sfence_vma_all()}
-                        self.run_next(task);
-                        // println_hart!("idel----", hart_id());
-                        self.suspend_current();
+            if let Some(task) = fetch_task() {
+                self.run_next(task);
+                self.suspend_current();
+            }
 
-                    }
-                    None => {
-                        info!("all user process finished!");
-                        // panic!("");
-                        // super::add_user_shell();
-                        // super::add_initproc();
-                    }
-                }
+            // let task = fetch_task();
+                
+            //     match task {
+            //         Some(task) => {
+            //             self.run_next(task);
+            //             self.suspend_current();
+
+            //         }
+            //         None => {
+            //             println!("all user process finished!");
+            //         }
+            //     }
         }
     }
     

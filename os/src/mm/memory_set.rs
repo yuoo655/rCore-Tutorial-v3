@@ -198,7 +198,6 @@ impl MemorySet {
                     map_area,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
-                                let va: VirtAddr= max_end_vpn.into();
             }
         }
         // map user stack with U flags
@@ -217,6 +216,7 @@ impl MemorySet {
             ),
             None,
         );
+        // println!("mapping user stack bottom {:#x?}  top:{:#x?}", user_stack_bottom, user_stack_top);
         // map TrapContext
         memory_set.push(
             MapArea::new(
@@ -260,9 +260,16 @@ impl MemorySet {
         // copy data sections/trap_context/user_stack
 
         let mut max_end_vpn = VirtPageNum(0);
+        let mut max_end_va = VirtAddr(0);
+
         for area in user_space.areas.iter() {
             let new_area = MapArea::from_another(area);
             max_end_vpn = new_area.vpn_range.get_end();
+            let va: VirtAddr = max_end_vpn.into();
+            if va.0 < 0x7ffff00000 {
+                max_end_va = va;
+            };
+
             memory_set.push(new_area, None);
             // copy data from another space
             for vpn in area.vpn_range {
@@ -275,14 +282,13 @@ impl MemorySet {
         }
 
         // map user stack with U flags
-        let max_end_va: VirtAddr = max_end_vpn.into();
         let mut user_stack_bottom: usize = max_end_va.into();
         // guard page
         user_stack_bottom += PAGE_SIZE;
 
         //map user stack
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
-
+        // println!("mapping user stack bottom {:#x?}  top:{:#x?}", user_stack_bottom, user_stack_top);
         memory_set.push(
             MapArea::new(
                 user_stack_bottom.into(),
