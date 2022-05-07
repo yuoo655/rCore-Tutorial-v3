@@ -37,3 +37,17 @@ impl TrapContext {
         cx
     }
 }
+
+
+impl Default for TrapContext {
+    fn default() -> Self {
+        Self {
+            x: [0; 32],
+            sstatus: sstatus::read(),
+            sepc: 0,
+            kernel_satp: 0,
+            kernel_sp: 0,
+            trap_handler: 0,
+        }
+    }
+}

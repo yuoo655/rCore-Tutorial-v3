@@ -7,7 +7,7 @@ mod pid;
 mod pool;
 mod action;
 mod signal;
-
+mod kthread;
 
 use crate::fs::{open_file, OpenFlags};
 use switch::__switch;
@@ -16,11 +16,8 @@ use alloc::{sync::Arc};
 pub use pool::{add_task, fetch_task, add_task_first_time};
 use lazy_static::*;
 pub use context::TaskContext;
-
-
 pub use signal::{SignalFlags, MAX_SIG};
 pub use action::{SignalAction, SignalActions};
-
 pub use processor::{
     run_tasks,
     current_task,
@@ -33,8 +30,10 @@ pub use processor::{
 };
 pub use pid::{
     PidHandle, pid_alloc, KernelStack,
+    RecycleAllocator,
     ustack_bottom_from_pid,
-    trap_cx_bottom_from_pid
+    trap_cx_bottom_from_pid,
+    kstack_alloc,
 };
 pub use manager::{
     PID2TCB,
@@ -43,6 +42,12 @@ pub use manager::{
     insert_into_pid2task,
 };
 
+pub use kthread::{
+    TgidHandle, kernel_tgid_alloc,
+    kernel_stackful_coroutine_test,
+    kthread_trap_cx_bottom_from_tid,
+    kthread_stack_bottom_from_tid,
+};
 
 use spin::Mutex;
 
@@ -73,7 +78,6 @@ pub fn block_current_and_run_next() {
     task_inner.task_status = TaskStatus::Blocking;
     drop(task_inner);
 
-    
     schedule(task_cx_ptr);
 }
 
@@ -85,33 +89,46 @@ pub fn exit_current_and_run_next(exit_code: i32) {
 
     // take from Processor
     let task = take_current_task().unwrap();
-    
-    remove_from_pid2task(task.getpid());
-    
+
+
+    let pid = task.pid.0;
+    let tgid = task.tgid;
+
     // **** hold current PCB lock
     let wl = WAIT_LOCK.lock();
     let mut inner = task.inner_exclusive_access();
+
     // Change status to Zombie
     inner.task_status = TaskStatus::Zombie;
+
     // Record exit code
     inner.exit_code = Some(exit_code);
-    // do not move to its parent but under initproc
+    
+    // main thread exit
+    if pid == tgid {
+        remove_from_pid2task(pid);
 
-    for child in inner.children.iter() {
-        child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
-        initproc_inner.children.push(child.clone());
+        //move child to initproc
+        for child in inner.children.iter() {
+            child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
+            initproc_inner.children.push(child.clone());
+        }
+
+        //clean up children dealloc resources
+        inner.children.clear();
+        // deallocate user space
+        inner.memory_set.recycle_data_pages();
+        // deallocate fdtable
+        inner.fd_table.clear();
+
     }
+    // release initproc lock
     drop(initproc_inner);
-    // ++++++ release parent PCB lock here
 
-    inner.children.clear();
-    // deallocate user space
-    inner.memory_set.recycle_data_pages();
     drop(inner);
-    // **** release current PCB lock
-    // drop task manually to maintain rc correctly
     drop(task);
     drop(wl);
+    // **** release current PCB lock
 
     // we do not have to save task context
     let mut _unused = TaskContext::zero_init();

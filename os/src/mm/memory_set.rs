@@ -65,6 +65,18 @@ impl MemorySet {
             None,
         );
     }
+
+    pub fn insert_identical_area(
+        &mut self,
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+        permission: MapPermission,
+    ) {
+        self.push(
+            MapArea::new(start_va, end_va, MapType::Identical, permission),
+            None,
+        );
+    }
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
         if let Some((idx, area)) = self
             .areas
@@ -209,6 +221,7 @@ impl MemorySet {
         let user_stack_bottom = ustack_bottom_from_pid(pid);
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
         //map user stack
+        // println!("mapping user stack bottom {:#x?}  top:{:#x?}", user_stack_bottom, user_stack_top);
         memory_set.push(
             MapArea::new(
                 user_stack_bottom.into(),
@@ -238,6 +251,9 @@ impl MemorySet {
             .translate(VirtAddr::from(trap_cx_bottom_va).into())
             .unwrap()
             .ppn();
+
+        // println!("new tcb/exec trap_cx_ppn: {:#x?}", trap_cx_ppn);
+
         (
             memory_set,
             user_stack_top,
@@ -266,6 +282,8 @@ impl MemorySet {
         let user_stack_bottom = ustack_bottom_from_pid(pid);
         //map user stack
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
+
+        // println!("mapping user stack bottom {:#x?}  top:{:#x?}", user_stack_bottom, user_stack_top);
         memory_set.push(
             MapArea::new(
                 user_stack_bottom.into(),
@@ -293,6 +311,8 @@ impl MemorySet {
             .translate(VirtAddr::from(trap_cx_bottom_va).into())
             .unwrap()
             .ppn();
+
+        // println!("fork trap_cx_ppn: {:#x?}", trap_cx_ppn);
 
         (
             memory_set,
@@ -348,6 +368,7 @@ impl MemorySet {
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
         
         //map user stack
+        // println!("mapping user stack bottom {:#x?}  top:{:#x?}", user_stack_bottom, user_stack_top);
         memory_set.push(
             MapArea::new(
                 user_stack_bottom.into(),
@@ -360,7 +381,6 @@ impl MemorySet {
 
         let trap_cx_bottom = trap_cx_bottom_from_pid(pid);
         let trap_cx_top = trap_cx_bottom + PAGE_SIZE;
-
         memory_set.push(
             MapArea::new(
                 trap_cx_bottom.into(),
@@ -376,6 +396,8 @@ impl MemorySet {
             .translate(VirtAddr::from(trap_cx_bottom_va).into())
             .unwrap()
             .ppn();
+
+        // println!("new user thread trap_cx_ppn: {:#x?}", trap_cx_ppn);
         (
             memory_set,
             user_stack_top,

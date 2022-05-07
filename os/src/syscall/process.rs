@@ -3,7 +3,7 @@ use crate::mm::{translated_ref, translated_refmut, translated_str};
 use crate::task::{
     current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next, SignalFlags, SignalAction, MAX_SIG, add_task_first_time,
-    pid2task
+    pid2task,WAIT_LOCK
 };
 use crate::timer::get_time_ms;
 use alloc::string::String;
@@ -29,6 +29,7 @@ pub fn sys_getpid() -> isize {
 }
 
 pub fn sys_fork() -> isize {
+    // println!("sys fork");
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
     let new_pid = new_task.pid.0;
@@ -77,19 +78,36 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
 pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 
     let task = current_task().unwrap();
-    // find a child process
-
-    // ---- access current PCB exclusively
+    let _ = WAIT_LOCK.lock();
     let mut inner = task.inner_exclusive_access();
     
-    if !inner
-        .children
-        .iter()
-        .any(|p| pid == -1 || pid as usize == p.getpid())
-    {
-        return -1;
-        // ---- release current PCB
-    }
+    // if pid == -1 {
+    //     // wait for all child processes
+
+
+
+
+
+    // }else {
+    //     // wait for a specific child process
+    //     if !inner.children.iter().any(|t| t.pid.0 == pid as usize) {
+    //         return -1;
+    //     }
+
+    // }
+
+    // // find a child process
+
+    // // ---- access current PCB exclusively
+    
+    // if !inner
+    //     .children
+    //     .iter()
+    //     .any(|p| pid == -1 || pid as usize == p.getpid())
+    // {
+    //     return -1;
+    //     // ---- release current PCB
+    // }
 
     let pair = inner.children.iter().enumerate().find(|(_, p)| {
         // ++++ temporarily access child PCB exclusively
@@ -99,13 +117,18 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 
     if let Some((idx, _)) = pair {
         let child = inner.children.remove(idx);
+
+        // drop(child);
+
         // confirm that child will be deallocated after being removed from children list
-        assert_eq!(Arc::strong_count(&child), 1);
+        // assert_eq!(Arc::strong_count(&child), 1);
+
         let found_pid = child.getpid();
         // ++++ temporarily access child PCB exclusively
         let exit_code = child.inner_exclusive_access().exit_code;
         // ++++ release child PCB
         *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code.unwrap();
+        
         found_pid as isize
     } else {
         -2

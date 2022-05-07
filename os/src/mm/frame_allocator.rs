@@ -92,9 +92,10 @@ pub fn init_frame_allocator() {
     extern "C" {
         fn ekernel();
     }
+    
     FRAME_ALLOCATOR.exclusive_access().init(
         PhysAddr::from(ekernel as usize).ceil(),
-        PhysAddr::from(MEMORY_END).floor(),
+        PhysAddr::from(MEMORY_END + 0x200000).floor(),
     );
 }
 

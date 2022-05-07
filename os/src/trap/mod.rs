@@ -1,6 +1,7 @@
 mod context;
 
 use crate::config::{TRAMPOLINE, TRAP_CONTEXT};
+use crate::mm::kernel_token;
 use crate::syscall::syscall;
 use crate::task::{
     check_signals_error_of_current, current_add_signal, current_trap_cx, current_user_token,
@@ -12,7 +13,7 @@ use core::arch::{asm, global_asm};
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
-    sie, stval, stvec,sstatus,
+    sie, stval, stvec,sstatus, sscratch, sepc,
 };
 
 global_asm!(include_str!("trap.S"));
@@ -22,8 +23,17 @@ pub fn init() {
 }
 
 fn set_kernel_trap_entry() {
+    extern "C" {
+        fn __alltraps();
+        fn __alltraps_k(); 
+    }
+
+    // 0xFFFF...F000
+    let __alltraps_k_va = __alltraps_k as usize - __alltraps as usize + TRAMPOLINE;
     unsafe {
-        stvec::write(trap_from_kernel as usize, TrapMode::Direct);
+        stvec::write(__alltraps_k_va, TrapMode::Direct);
+        sscratch::write(trap_from_kernel as usize);
+        sstatus::set_sie();
     }
 }
 
@@ -41,7 +51,6 @@ pub fn enable_timer_interrupt() {
 
 #[no_mangle]
 pub fn trap_handler() -> ! {
-
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
@@ -81,6 +90,7 @@ pub fn trap_handler() -> ! {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             set_next_trigger();
             check_timer();
+            println!("[kernel] timer interrupt");
             suspend_current_and_run_next();
         }
         _ => {
@@ -92,7 +102,7 @@ pub fn trap_handler() -> ! {
         }
     }
     // handle signals (handle the sent signal)
-    handle_signals();
+    // handle_signals();
 
     // check error signals (if error then exit)
     if let Some((errno, msg)) = check_signals_error_of_current() {
@@ -130,11 +140,72 @@ pub fn trap_return() -> ! {
     }
 }
 
-#[no_mangle]
-pub fn trap_from_kernel() -> ! {
-    use riscv::register::sepc;
-    println!("stval = {:#x}, sepc = {:#x}", stval::read(), sepc::read());
-    panic!("a trap {:?} from kernel!", scause::read().cause());
-}
 
 pub use context::TrapContext;
+#[no_mangle]
+pub fn trap_from_kernel(_trap_cx: &TrapContext) {
+    let scause = scause::read();
+    let stval = stval::read();
+
+    let local_sstatus = sstatus::read();
+    if local_sstatus.spp() != sstatus::SPP::Supervisor{
+        panic!("trap_from_kernel(): not from supervisor mode");
+    }
+    if local_sstatus.sie()  {
+        panic!("trap_from_kernel(): interrupts enabled");
+    }
+    match scause.cause() {
+        Trap::Interrupt(Interrupt::SupervisorExternal) => {
+            // crate::board::irq_handler();
+        },
+        Trap::Interrupt(Interrupt::SupervisorTimer) => {
+            set_next_trigger();
+            check_timer();
+            unsafe {
+                TICKS += 1;
+                if TICKS == 500 {
+                    TICKS = 0;
+                    println!("* 500 ticks *");
+                }
+            }
+        },
+        _ => {
+            panic!(
+                "Unsupported trap from kernel: {:?}, stval = {:#x}!",
+                scause.cause(),
+                stval
+            );
+        },
+    }
+}
+
+
+#[no_mangle]
+pub fn kernel_return() -> ! {
+    loop{}
+    // println!("kernel_return");
+    // extern "C" {
+    //     fn __alltraps();
+    //     fn __restore_k(); 
+    // }
+    // let trap_cx_user_va = current_trap_cx_user_va();
+
+    // let mut trap_cx = unsafe { *(   trap_cx_user_va as *mut TrapContext  ) };
+    // // println!("trap_cx: {:#x?}", trap_cx);
+
+    // let kernel_satp = kernel_token();
+
+    // let restore_k_va = __restore_k as usize - __alltraps as usize + TRAMPOLINE;
+    // unsafe {
+    //     asm!(
+    //         "fence.i",
+    //         "jr {restore_k_va}",
+    //         restore_k_va = in(reg) restore_k_va,
+    //         in("a0") trap_cx_user_va,
+    //         in("a1") kernel_satp,
+    //         options(noreturn)
+    //     );
+    // }
+}
+
+pub static mut TICKS: usize = 0;

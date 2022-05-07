@@ -3,6 +3,7 @@ use super::{fetch_task, TaskStatus};
 use super::TaskContext;
 use super::__switch;
 use super::add_task;
+use super::kthread_trap_cx_bottom_from_tid;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -97,6 +98,18 @@ impl Processor {
                 self.suspend_current();
             }
 
+            // let task = fetch_task();
+                
+            //     match task {
+            //         Some(task) => {
+            //             self.run_next(task);
+            //             self.suspend_current();
+
+            //         }
+            //         None => {
+            //             println!("all user process finished!");
+            //         }
+            //     }
         }
     }
     
@@ -167,4 +180,12 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
 
 pub fn current_trap_cx_user_va() -> usize {
     current_task().unwrap().trap_cx_user_va()
+}
+
+
+pub fn current_trap_cx_kernel_va() -> usize {
+    let task = current_task().unwrap();
+    let tgid = task.tgid;
+    let va = kthread_trap_cx_bottom_from_tid(tgid);
+    va
 }
