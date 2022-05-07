@@ -29,12 +29,18 @@ pub use processor::{
     take_current_task,
     schedule,
     hart_id,
+    current_trap_cx_user_va
 };
-pub use pid::{PidHandle, pid_alloc, KernelStack};
+pub use pid::{
+    PidHandle, pid_alloc, KernelStack,
+    ustack_bottom_from_pid,
+    trap_cx_bottom_from_pid
+};
 pub use manager::{
     PID2TCB,
     pid2task,
-    remove_from_pid2task
+    remove_from_pid2task,
+    insert_into_pid2task,
 };
 
 
@@ -116,7 +122,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
 
 lazy_static! {
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
-        let inode = open_file("usertests", OpenFlags::RDONLY).unwrap();
+        let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
         let v = inode.read_all();
         TaskControlBlock::new(v.as_slice())
     });
@@ -172,6 +178,7 @@ fn call_user_signal_handler(sig: usize, signal: SignalFlags) {
 
     // backup trapframe
     let mut trap_ctx = task_inner.get_trap_cx();
+    // let trap_cx_copy = trap_ctx.clone();
     task_inner.trap_ctx_backup = Some(*trap_ctx);
     
     // modify trapframe

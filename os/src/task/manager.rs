@@ -74,3 +74,8 @@ pub fn remove_from_pid2task(pid: usize) {
     }
 }
 
+
+
+pub fn insert_into_pid2task(pid: usize, task: Arc<TaskControlBlock>) {
+    PID2TCB.lock().insert(pid, task);
+}

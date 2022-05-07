@@ -97,18 +97,6 @@ impl Processor {
                 self.suspend_current();
             }
 
-            // let task = fetch_task();
-                
-            //     match task {
-            //         Some(task) => {
-            //             self.run_next(task);
-            //             self.suspend_current();
-
-            //         }
-            //         None => {
-            //             println!("all user process finished!");
-            //         }
-            //     }
         }
     }
     
@@ -174,4 +162,9 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+
+
+pub fn current_trap_cx_user_va() -> usize {
+    current_task().unwrap().trap_cx_user_va()
 }

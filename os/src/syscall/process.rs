@@ -32,8 +32,11 @@ pub fn sys_fork() -> isize {
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
     let new_pid = new_task.pid.0;
+
     // modify trap context of new_task, because it returns immediately after switching
+
     let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+
     // we do not have to move to next instruction since we have done it before
     // for child process, fork returns 0
     trap_cx.x[10] = 0;
@@ -59,6 +62,7 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_inode.read_all();
         let task = current_task().unwrap();
+        let current_pid = task.pid.0;
         let argc = args_vec.len();
         task.exec(all_data.as_slice(), args_vec);
         // return argc because cx.x[10] will be covered with it later
@@ -149,6 +153,7 @@ pub fn sys_sigretrun() -> isize {
         inner.handling_sig = -1;
         // restore the trap context
         let trap_ctx = inner.get_trap_cx();
+
         *trap_ctx = inner.trap_ctx_backup.unwrap();
         0
     } else {

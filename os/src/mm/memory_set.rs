@@ -11,6 +11,11 @@ use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
 
+use crate::task::{
+    ustack_bottom_from_pid,
+    trap_cx_bottom_from_pid,
+};
+
 extern "C" {
     fn stext();
     fn etext();
@@ -175,7 +180,7 @@ impl MemorySet {
         let magic = elf_header.pt1.magic;
         assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
         let ph_count = elf_header.pt2.ph_count();
-        let mut max_end_vpn = VirtPageNum(0);
+        // let mut max_end_vpn = VirtPageNum(0);
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
@@ -193,18 +198,72 @@ impl MemorySet {
                     map_perm |= MapPermission::X;
                 }
                 let map_area = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
-                max_end_vpn = map_area.vpn_range.get_end();
+                // max_end_vpn = map_area.vpn_range.get_end();
                 memory_set.push(
                     map_area,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
             }
-        }
+        }        
         // map user stack with U flags
-        let max_end_va: VirtAddr = max_end_vpn.into();
-        let mut user_stack_bottom: usize = max_end_va.into();
-        // guard page
-        user_stack_bottom += PAGE_SIZE;
+        let user_stack_bottom = ustack_bottom_from_pid(pid);
+        let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
+        //map user stack
+        memory_set.push(
+            MapArea::new(
+                user_stack_bottom.into(),
+                user_stack_top.into(),
+                MapType::Framed,
+                MapPermission::R | MapPermission::W | MapPermission::U,
+            ),
+            None,
+        );
+
+
+        let trap_cx_bottom = trap_cx_bottom_from_pid(pid);
+        let trap_cx_top = trap_cx_bottom + PAGE_SIZE;
+        memory_set.push(
+            MapArea::new(
+                trap_cx_bottom.into(),
+                trap_cx_top.into(),
+                MapType::Framed,
+                MapPermission::R | MapPermission::W,
+            ),
+            None,
+        );
+
+
+        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_pid(pid).into();
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(trap_cx_bottom_va).into())
+            .unwrap()
+            .ppn();
+        (
+            memory_set,
+            user_stack_top,
+            elf.header.pt2.entry_point() as usize,
+        )
+    }
+    pub fn from_existed_user(user_space: &MemorySet, pid:usize) -> (Self, usize) {
+        let mut memory_set = Self::new_bare();
+        // map trampoline
+        memory_set.map_trampoline();
+        // copy data sections/trap_context/user_stack
+        for area in user_space.areas.iter() {
+            let new_area = MapArea::from_another(area);
+            memory_set.push(new_area, None);
+            // copy data from another space
+            for vpn in area.vpn_range {
+                let src_ppn = user_space.translate(vpn).unwrap().ppn();
+                let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
+                dst_ppn
+                    .get_bytes_array()
+                    .copy_from_slice(src_ppn.get_bytes_array());
+            }
+        }
+
+        // map user stack with U flags
+        let user_stack_bottom = ustack_bottom_from_pid(pid);
         //map user stack
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
         memory_set.push(
@@ -216,24 +275,57 @@ impl MemorySet {
             ),
             None,
         );
-        // println!("mapping user stack bottom {:#x?}  top:{:#x?}", user_stack_bottom, user_stack_top);
-        // map TrapContext
+
+        let trap_cx_bottom = trap_cx_bottom_from_pid(pid);
+        let trap_cx_top = trap_cx_bottom + PAGE_SIZE;
+
         memory_set.push(
             MapArea::new(
-                TRAP_CONTEXT.into(),
-                TRAMPOLINE.into(),
+                trap_cx_bottom.into(),
+                trap_cx_top.into(),
                 MapType::Framed,
-                MapPermission::R | MapPermission::W,
+                MapPermission::R | MapPermission::W ,
             ),
             None,
         );
+        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_pid(pid).into();
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(trap_cx_bottom_va).into())
+            .unwrap()
+            .ppn();
+
         (
             memory_set,
             user_stack_top,
-            elf.header.pt2.entry_point() as usize,
         )
     }
-    pub fn from_existed_user(user_space: &MemorySet) -> MemorySet {
+
+    pub fn from_existed(user_space: &MemorySet, pid:usize) -> (Self, usize) {
+        // let mut memory_set = Self::new_bare();
+        // // map trampoline
+        // memory_set.map_trampoline();
+        // // copy data sections/trap_context/user_stack
+
+        // // let mut max_end_vpn = VirtPageNum(0);
+        // // let mut max_end_va = VirtAddr(0);
+
+        // for area in user_space.areas.iter() {
+        //     let new_area = MapArea::from_another(area);
+        //     // max_end_vpn = new_area.vpn_range.get_end();
+        //     // let va: VirtAddr = max_end_vpn.into();
+        //     // if va.0 < 0x7ffff00000 {
+        //     //     max_end_va = va;
+        //     // };
+        //     memory_set.push(new_area, None);
+        //     // copy data from another space
+        //     for vpn in area.vpn_range {
+        //         let src_ppn = user_space.translate(vpn).unwrap().ppn();
+        //         let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
+        //         dst_ppn
+        //             .get_bytes_array()
+        //             .copy_from_slice(src_ppn.get_bytes_array());
+        //     }
+        // }
         let mut memory_set = Self::new_bare();
         // map trampoline
         memory_set.map_trampoline();
@@ -250,55 +342,40 @@ impl MemorySet {
                     .copy_from_slice(src_ppn.get_bytes_array());
             }
         }
-        memory_set
-    }
-
-    pub fn from_existed(user_space: &MemorySet) -> (Self, usize) {
-        let mut memory_set = Self::new_bare();
-        // map trampoline
-        memory_set.map_trampoline();
-        // copy data sections/trap_context/user_stack
-
-        let mut max_end_vpn = VirtPageNum(0);
-        let mut max_end_va = VirtAddr(0);
-
-        for area in user_space.areas.iter() {
-            let new_area = MapArea::from_another(area);
-            max_end_vpn = new_area.vpn_range.get_end();
-            let va: VirtAddr = max_end_vpn.into();
-            if va.0 < 0x7ffff00000 {
-                max_end_va = va;
-            };
-
-            memory_set.push(new_area, None);
-            // copy data from another space
-            for vpn in area.vpn_range {
-                let src_ppn = user_space.translate(vpn).unwrap().ppn();
-                let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
-                dst_ppn
-                    .get_bytes_array()
-                    .copy_from_slice(src_ppn.get_bytes_array());
-            }
-        }
-
+        
         // map user stack with U flags
-        let mut user_stack_bottom: usize = max_end_va.into();
-        // guard page
-        user_stack_bottom += PAGE_SIZE;
-
-        //map user stack
+        let user_stack_bottom = ustack_bottom_from_pid(pid);
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
-        // println!("mapping user stack bottom {:#x?}  top:{:#x?}", user_stack_bottom, user_stack_top);
+        
+        //map user stack
         memory_set.push(
             MapArea::new(
                 user_stack_bottom.into(),
                 user_stack_top.into(),
                 MapType::Framed,
-                MapPermission::R | MapPermission::W | MapPermission::U | MapPermission::X,
+                MapPermission::R | MapPermission::W | MapPermission::U,
             ),
             None,
         );
-        
+
+        let trap_cx_bottom = trap_cx_bottom_from_pid(pid);
+        let trap_cx_top = trap_cx_bottom + PAGE_SIZE;
+
+        memory_set.push(
+            MapArea::new(
+                trap_cx_bottom.into(),
+                trap_cx_top.into(),
+                MapType::Framed,
+                MapPermission::R | MapPermission::W ,
+            ),
+            None,
+        );
+
+        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_pid(pid).into();
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(trap_cx_bottom_va).into())
+            .unwrap()
+            .ppn();
         (
             memory_set,
             user_stack_top,

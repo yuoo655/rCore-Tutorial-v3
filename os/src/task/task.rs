@@ -1,3 +1,5 @@
+use core::arch::riscv64::sfence_vma;
+
 use crate::mm::{
     MemorySet,
     PhysPageNum,
@@ -8,7 +10,7 @@ use crate::mm::{
 use crate::trap::{TrapContext, trap_handler};
 use crate::config::{TRAP_CONTEXT};
 use super::TaskContext;
-use super::{PidHandle, pid_alloc, KernelStack};
+use super::{PidHandle, pid_alloc, KernelStack,insert_into_pid2task, add_task};
 use alloc::sync::{Weak, Arc};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -20,6 +22,8 @@ use crate::sync::{
     Semaphore,
     Condvar,
 };
+use core::arch::asm;
+
 
 use crate::fs::{File, Stdin, Stdout};
 use super::{
@@ -27,6 +31,10 @@ use super::{
     SignalActions,
 };
 
+use crate::task::{
+    ustack_bottom_from_pid,
+    trap_cx_bottom_from_pid,
+};
 
 pub struct TaskControlBlock {
     // immutable
@@ -99,16 +107,40 @@ impl TaskControlBlock {
         self.inner.lock()
     }
 
+    pub fn trap_cx_user_va(&self) -> usize {
+        let mut trap_cx_user_va = 0;
+
+        if self.pid.0 == self.tgid {
+            trap_cx_user_va = trap_cx_bottom_from_pid(0);
+        }else{
+            trap_cx_user_va = trap_cx_bottom_from_pid(self.pid.0);
+        }
+        trap_cx_user_va
+
+    }    
     pub fn new(elf_data: &[u8]) -> Self {
         // alloc a pid 
         let pid_handle = pid_alloc();
         let pid = pid_handle.0;
         let tgid = pid_handle.0;
-
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data, pid);
+        
+        use riscv::register::sstatus;
+        let sstatus = sstatus::read();
+        println!("");
+        print!("before map-----------------sstatus = {:#0b}", sstatus.bits());
+        println!("");
+
+        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data, 0);
+
+        unsafe {
+            asm!("sfence.vma");
+        }
+        // for tcb::new()   and tcb::exec()     
+        // ustack trap_cx =  ustack_bottom_from_pid(0) trap_cx_bottom_from_pid(0)
+        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_pid(0 as usize).into();
         let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+            .translate(VirtAddr::from(trap_cx_bottom_va).into())
             .unwrap()
             .ppn();
 
@@ -159,14 +191,23 @@ impl TaskControlBlock {
             kernel_stack_top,
             trap_handler as usize,
         );
+
         task_control_block
     }
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>) {
 
+        let parent_pid = self.pid.0;
+
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (memory_set, mut user_sp, entry_point) = MemorySet::from_elf(elf_data, 0);
+        let (memory_set, mut user_sp, entry_point) = MemorySet::from_elf(elf_data, parent_pid);
+
+        unsafe {
+            asm!("sfence.vma");
+        }
+        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_pid(parent_pid).into();
+
         let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+            .translate(VirtAddr::from(trap_cx_bottom_va).into())
             .unwrap()
             .ppn();
         // push arguments on user stack
@@ -216,21 +257,29 @@ impl TaskControlBlock {
     pub fn fork(self: &Arc<TaskControlBlock>) -> Arc<TaskControlBlock> {
 
         let parent_pid = self.pid.0;
+        let pid_handle = pid_alloc();
+        let pid = pid_handle.0;
+        let tgid = parent_pid;
 
         // ---- hold parent PCB lock
         let mut parent_inner = self.inner_exclusive_access();
 
         // copy user space(include trap context)
-        let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+        let (memory_set, user_sp) = MemorySet::from_existed_user(&parent_inner.memory_set, pid);
+
+        unsafe {
+            asm!("sfence.vma");
+        }
+
+        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_pid(pid as usize).into();
+
         let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+            .translate(VirtAddr::from(trap_cx_bottom_va).into())
             .unwrap()
             .ppn();
         // alloc a pid and a kernel stack in kernel space
-        let pid_handle = pid_alloc();
 
         // get parent pid
-        let tgid = parent_pid;
 
         let kernel_stack = KernelStack::new(&pid_handle);
         let kernel_stack_top = kernel_stack.get_top();
@@ -243,14 +292,14 @@ impl TaskControlBlock {
                 new_fd_table.push(None);
             }
         }
-        let task_control_block = Arc::new(TaskControlBlock {
+        let child = Arc::new(TaskControlBlock {
             pid: pid_handle,
             tgid: tgid,
             kernel_stack,
             inner: unsafe {
                 Mutex::new(TaskControlBlockInner {
                     trap_cx_ppn,
-                    base_size: parent_inner.base_size,
+                    base_size: user_sp,
                     task_cx: TaskContext::goto_trap_return(kernel_stack_top),
                     task_status: TaskStatus::Ready,
                     memory_set,
@@ -273,37 +322,50 @@ impl TaskControlBlock {
             },
         });
         // add child
-        parent_inner.children.push(task_control_block.clone());
+        parent_inner.children.push(child.clone());
+
+        let p_cx = parent_inner.get_trap_cx();
         // modify kernel_sp in trap_cx
         // **** access child PCB exclusively
-        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+        let inner = child.inner_exclusive_access();
+        let trap_cx = inner.get_trap_cx();
+        
+        *trap_cx = *parent_inner.get_trap_cx();
         trap_cx.kernel_sp = kernel_stack_top;
-        // return
-        task_control_block
-        // **** release child PCB
-        // ---- release parent PCB
+        
+        drop(parent_inner);
+        drop(inner);
+
+        child
     }
 
 
-    pub fn new_user_thread(self: &Arc<TaskControlBlock>, entry_point: usize, arg: usize) -> Arc<TaskControlBlock> {
+    pub fn new_user_thread(self: &Arc<TaskControlBlock>, entry_point: usize, arg: usize, parent_pid:usize) -> Arc<TaskControlBlock> {
 
-        let parent_pid = self.pid.0;
+        // alloc a pid and a kernel stack in kernel space
+        let pid_handle = pid_alloc();
+        let pid = pid_handle.0;
+
+        // let parent_pid = self.pid.0;
+        let tgid = parent_pid;
+
 
         // ---- hold parent PCB lock
         let mut parent_inner = self.inner_exclusive_access();
 
         // copy user space(include trap context)
-        let (memory_set, user_sp) = MemorySet::from_existed(&parent_inner.memory_set);
+        let (memory_set, user_sp) = MemorySet::from_existed(&parent_inner.memory_set, pid);
         
+        unsafe {
+            asm!("sfence.vma");
+        }
+        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_pid(pid).into();
         let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+            .translate(VirtAddr::from(trap_cx_bottom_va).into())
             .unwrap()
             .ppn();
-        // alloc a pid and a kernel stack in kernel space
-        let pid_handle = pid_alloc();
 
         // get parent pid
-        let tgid = parent_pid;
 
         let kernel_stack = KernelStack::new(&pid_handle);
         let kernel_stack_top = kernel_stack.get_top();
@@ -355,14 +417,15 @@ impl TaskControlBlock {
         let inner = task_control_block.inner_exclusive_access();
 
         let trap_cx = inner.get_trap_cx();
+        
         trap_cx.kernel_sp = kernel_stack_top;
-
-
+        
+        
         let mut trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
             KERNEL_SPACE.exclusive_access().token(),
-            self.kernel_stack.get_top(),
+            kernel_stack_top,
             trap_handler as usize,
         );
         trap_cx.x[10] = arg;

@@ -15,10 +15,13 @@ pub use page_table::{
     PageTableEntry, UserBuffer, UserBufferIterator,
 };
 
+use riscv::register::sstatus::{self, Sstatus, SPP};
+
 
 pub fn init() {
     heap_allocator::init_heap();
     frame_allocator::init_frame_allocator();
+    let sstatus = sstatus::read();
     KERNEL_SPACE.exclusive_access().activate();
 }
 

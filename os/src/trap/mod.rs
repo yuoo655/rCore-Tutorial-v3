@@ -5,6 +5,7 @@ use crate::syscall::syscall;
 use crate::task::{
     check_signals_error_of_current, current_add_signal, current_trap_cx, current_user_token,
     exit_current_and_run_next, suspend_current_and_run_next, SignalFlags, handle_signals,
+    current_trap_cx_user_va,
 };
 use crate::timer::{check_timer, set_next_trigger};
 use core::arch::{asm, global_asm};
@@ -40,6 +41,7 @@ pub fn enable_timer_interrupt() {
 
 #[no_mangle]
 pub fn trap_handler() -> ! {
+
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
@@ -49,6 +51,9 @@ pub fn trap_handler() -> ! {
             let mut cx = current_trap_cx();
             cx.sepc += 4;        
             // get system call return value
+            unsafe{
+                sstatus::set_spie();
+            }
             let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
@@ -99,17 +104,18 @@ pub fn trap_handler() -> ! {
 
 #[no_mangle]
 pub fn trap_return() -> ! {
-    unsafe {
+    unsafe{
         sstatus::clear_sie();
     }
     set_user_trap_entry();
-    let trap_cx_ptr = TRAP_CONTEXT;
+    let trap_cx_ptr = current_trap_cx_user_va();
     let user_satp = current_user_token();
     extern "C" {
         fn __alltraps();
         fn __restore();
     }
     let restore_va = __restore as usize - __alltraps as usize + TRAMPOLINE;
+
     unsafe {
         sstatus::set_spie();
         sstatus::set_spp(sstatus::SPP::User);

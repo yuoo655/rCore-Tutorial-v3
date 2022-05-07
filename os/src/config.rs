@@ -13,3 +13,5 @@ pub const TRAP_CONTEXT: usize = TRAMPOLINE - PAGE_SIZE;
 pub use crate::board::{CLOCK_FREQ, MMIO};
 
 pub const CPU_NUM: usize = 4;
+
+pub const TRAP_CONTEXT_BASE: usize = TRAMPOLINE - PAGE_SIZE;

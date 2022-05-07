@@ -2,7 +2,7 @@
 #![no_main]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
-
+#![feature(stdsimd)]
 extern crate alloc;
 
 #[macro_use]
@@ -68,17 +68,15 @@ pub fn rust_main(hart_id: usize) -> ! {
         timer::set_next_trigger();
         fs::list_apps();
         task::add_initproc();
-        
         AP_CAN_INIT.store(true, Ordering::Relaxed);
     }else {
         init_other_cpu();
     }
     
     println!("Hello");
-    task::run_tasks();
+    task::run_tasks(); 
     panic!("Unreachable in rust_main!");
 }
-
 pub fn init_other_cpu(){
 
     let hart_id = hart_id();
@@ -105,8 +103,6 @@ pub fn others_main(){
 }
 
 pub fn thread_local_init() {
-    // 允许内核读写用户态内存
-    // 取决于 CPU 的 RISC-V 规范版本就行处理
     unsafe { riscv::register::sstatus::set_sum(); }
 }
 /// Get current cpu id

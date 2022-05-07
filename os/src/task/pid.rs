@@ -6,6 +6,8 @@ use crate::config::{
     PAGE_SIZE,
     TRAMPOLINE,
     KERNEL_STACK_SIZE,
+    USER_STACK_SIZE,
+    TRAP_CONTEXT_BASE
 };
 
 struct PidAllocator {
@@ -16,7 +18,7 @@ struct PidAllocator {
 impl PidAllocator {
     pub fn new() -> Self {
         PidAllocator {
-            current: 0,
+            current: 1,
             recycled: Vec::new(),
         }
     }
@@ -47,7 +49,6 @@ pub struct PidHandle(pub usize);
 
 impl Drop for PidHandle {
     fn drop(&mut self) {
-        //println!("drop pid {}", self.0);
         PID_ALLOCATOR.lock().dealloc(self.0);
     }
 }
@@ -66,7 +67,6 @@ pub fn pid_alloc() -> PidHandle {
 pub fn kernel_stack_position(app_id: usize) -> (usize, usize) {
     let top = TRAMPOLINE - app_id * (KERNEL_STACK_SIZE + PAGE_SIZE);
     let bottom = top - KERNEL_STACK_SIZE;
-    // println!("[kernel] app_id = {}, bottom = {:#x}, top = {:#x}", app_id, bottom, top);
     (bottom, top)
 }
 
@@ -110,4 +110,15 @@ impl Drop for KernelStack {
             .exclusive_access()
             .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
     }
+}
+
+
+
+
+pub fn trap_cx_bottom_from_pid(pid: usize) -> usize {
+    TRAP_CONTEXT_BASE - pid * PAGE_SIZE
+}
+
+pub fn ustack_bottom_from_pid(pid: usize) -> usize {
+    0x30000 + pid * (PAGE_SIZE + USER_STACK_SIZE)
 }
