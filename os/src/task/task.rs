@@ -521,7 +521,7 @@ impl TaskControlBlock {
         context.ra = entry as usize;
         context.sp = stack_top_va;
 
-        println!("task context: {:#x?}", context);
+        // println!("task context: {:#x?}", context);
         let tcb = Arc::new(TaskControlBlock {
             pid: pid_handle,
             tgid: tgid,
@@ -555,7 +555,7 @@ impl TaskControlBlock {
         let mut trap_cx_precreate = new_kthread_trap_cx(entry, kstack_top);
         let cx = tcb.inner_exclusive_access().get_trap_cx();
         *cx = trap_cx_precreate;
-        println!("cx: {:#x?}", cx);
+        // println!("cx: {:#x?}", cx);
         tcb
     }
 
