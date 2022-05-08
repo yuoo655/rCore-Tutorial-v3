@@ -208,9 +208,13 @@ pub fn kernel_tgid_alloc() -> TgidHandle {
 
 
 pub fn kthread_trap_cx_bottom_from_tid(tgid: usize) -> usize {
-    0x80801000 + tgid * PAGE_SIZE
+    //guard page
+    let memory_end = MEMORY_END + PAGE_SIZE;
+    memory_end + tgid * PAGE_SIZE
 }
 
 pub fn kthread_stack_bottom_from_tid(tgid: usize) -> usize {
-    0x80900000 + tgid * STACK_SIZE
+    //guard page +  trap cx for kthread
+    let memory_end = MEMORY_END + PAGE_SIZE + 0x100000;
+    memory_end + tgid * STACK_SIZE
 }

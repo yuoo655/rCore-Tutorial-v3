@@ -159,20 +159,14 @@ pub fn trap_from_kernel(_trap_cx: &TrapContext) {
         },
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             set_next_trigger();
-            check_timer();
-            unsafe {
-                TICKS += 1;
-                if TICKS == 500 {
-                    TICKS = 0;
-                    println!("* 500 ticks *");
-                }
-            }
+            // check_timer();
         },
         _ => {
             panic!(
-                "Unsupported trap from kernel: {:?}, stval = {:#x}!",
+                "Unsupported trap from kernel: {:?}, stval = {:#x} memoryend:{:#x}!",
                 scause.cause(),
-                stval
+                stval,
+                crate::config::MEMORY_END
             );
         },
     }
@@ -182,29 +176,6 @@ pub fn trap_from_kernel(_trap_cx: &TrapContext) {
 #[no_mangle]
 pub fn kernel_return() -> ! {
     loop{}
-    // println!("kernel_return");
-    // extern "C" {
-    //     fn __alltraps();
-    //     fn __restore_k(); 
-    // }
-    // let trap_cx_user_va = current_trap_cx_user_va();
-
-    // let mut trap_cx = unsafe { *(   trap_cx_user_va as *mut TrapContext  ) };
-    // // println!("trap_cx: {:#x?}", trap_cx);
-
-    // let kernel_satp = kernel_token();
-
-    // let restore_k_va = __restore_k as usize - __alltraps as usize + TRAMPOLINE;
-    // unsafe {
-    //     asm!(
-    //         "fence.i",
-    //         "jr {restore_k_va}",
-    //         restore_k_va = in(reg) restore_k_va,
-    //         in("a0") trap_cx_user_va,
-    //         in("a1") kernel_satp,
-    //         options(noreturn)
-    //     );
-    // }
 }
 
 pub static mut TICKS: usize = 0;

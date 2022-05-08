@@ -29,13 +29,14 @@ pub fn sys_getpid() -> isize {
 }
 
 pub fn sys_fork() -> isize {
-    // println!("sys fork");
+    // let wl = WAIT_LOCK.lock();
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
+
+    // drop(wl);
     let new_pid = new_task.pid.0;
 
     // modify trap context of new_task, because it returns immediately after switching
-
     let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
 
     // we do not have to move to next instruction since we have done it before
@@ -77,37 +78,23 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
 /// Else if there is a child process but it is still running, return -2.
 pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 
+    
     let task = current_task().unwrap();
-    let _ = WAIT_LOCK.lock();
+    // find a child process
+    
+    // ---- access current PCB exclusively
+    // let _ = WAIT_LOCK.lock();
     let mut inner = task.inner_exclusive_access();
     
-    // if pid == -1 {
-    //     // wait for all child processes
-
-
-
-
-
-    // }else {
-    //     // wait for a specific child process
-    //     if !inner.children.iter().any(|t| t.pid.0 == pid as usize) {
-    //         return -1;
-    //     }
-
-    // }
-
-    // // find a child process
-
-    // // ---- access current PCB exclusively
-    
-    // if !inner
-    //     .children
-    //     .iter()
-    //     .any(|p| pid == -1 || pid as usize == p.getpid())
-    // {
-    //     return -1;
-    //     // ---- release current PCB
-    // }
+    if !inner
+        .children
+        .iter()
+        .any(|p| pid == -1 || pid as usize == p.getpid())
+    {
+        println!("no child process with pid {}", pid);
+        return -1;
+        // ---- release current PCB
+    }
 
     let pair = inner.children.iter().enumerate().find(|(_, p)| {
         // ++++ temporarily access child PCB exclusively
@@ -117,18 +104,14 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 
     if let Some((idx, _)) = pair {
         let child = inner.children.remove(idx);
-
-        // drop(child);
-
         // confirm that child will be deallocated after being removed from children list
+        // println!("strong conut child:{}", Arc::strong_count(&child));
         // assert_eq!(Arc::strong_count(&child), 1);
-
         let found_pid = child.getpid();
         // ++++ temporarily access child PCB exclusively
         let exit_code = child.inner_exclusive_access().exit_code;
         // ++++ release child PCB
         *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code.unwrap();
-        
         found_pid as isize
     } else {
         -2
