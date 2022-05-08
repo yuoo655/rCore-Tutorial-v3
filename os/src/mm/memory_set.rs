@@ -321,31 +321,6 @@ impl MemorySet {
     }
 
     pub fn from_existed(user_space: &MemorySet, pid:usize) -> (Self, usize) {
-        // let mut memory_set = Self::new_bare();
-        // // map trampoline
-        // memory_set.map_trampoline();
-        // // copy data sections/trap_context/user_stack
-
-        // // let mut max_end_vpn = VirtPageNum(0);
-        // // let mut max_end_va = VirtAddr(0);
-
-        // for area in user_space.areas.iter() {
-        //     let new_area = MapArea::from_another(area);
-        //     // max_end_vpn = new_area.vpn_range.get_end();
-        //     // let va: VirtAddr = max_end_vpn.into();
-        //     // if va.0 < 0x7ffff00000 {
-        //     //     max_end_va = va;
-        //     // };
-        //     memory_set.push(new_area, None);
-        //     // copy data from another space
-        //     for vpn in area.vpn_range {
-        //         let src_ppn = user_space.translate(vpn).unwrap().ppn();
-        //         let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
-        //         dst_ppn
-        //             .get_bytes_array()
-        //             .copy_from_slice(src_ppn.get_bytes_array());
-        //     }
-        // }
         let mut memory_set = Self::new_bare();
         // map trampoline
         memory_set.map_trampoline();

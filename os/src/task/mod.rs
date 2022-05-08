@@ -13,7 +13,7 @@ use crate::fs::{open_file, OpenFlags};
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 use alloc::{sync::Arc};
-pub use pool::{add_task, fetch_task, add_task_first_time};
+pub use pool::{add_task, fetch_task, add_task_first_time,sleep_task};
 use lazy_static::*;
 pub use context::TaskContext;
 pub use signal::{SignalFlags, MAX_SIG};
@@ -133,7 +133,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     // we do not have to save task context
     let mut _unused = TaskContext::zero_init();
 
-    warn!("exit_current_and_run_next schedule");
+    // println!("exit_current_and_run_next schedule");
     schedule(&mut _unused as *mut TaskContext);
 }
 

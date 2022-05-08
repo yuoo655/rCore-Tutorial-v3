@@ -53,7 +53,10 @@ pub struct PidHandle(pub usize);
 
 impl Drop for PidHandle {
     fn drop(&mut self) {
-        //println!("drop pid {}", self.0);
+        //skip for kthread
+        if self.0 == 0 {
+            return;
+        }
         PID_ALLOCATOR.lock().dealloc(self.0);
     }
 }

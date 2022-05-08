@@ -25,6 +25,14 @@ impl TaskPool {
         self.scheduler.add(task);
     }
 
+    pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
+        self.scheduler.fetch()
+    }
+
+    #[allow(unused)]
+    pub fn remove(&mut self, task: Arc<TaskControlBlock>) {
+        self.scheduler.remove(&task);
+    }
 
     #[allow(unused)]
     pub fn wake(&mut self, task: Arc<TaskControlBlock>) {
@@ -32,10 +40,10 @@ impl TaskPool {
         self.scheduler.add(task);
     }
 
-
-
-    pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.scheduler.fetch()
+    #[allow(unused)]
+    pub fn sleep(&mut self, task: Arc<TaskControlBlock>) {
+        self.scheduler.remove(&task);
+        self.sleeping_tasks.insert(task);
     }
 
 }
@@ -55,3 +63,6 @@ pub fn fetch_task() -> Option<Arc<TaskControlBlock>> {
     TASK_POOL.lock().fetch()
 }
 
+pub fn sleep_task(task: Arc<TaskControlBlock>) {
+    TASK_POOL.lock().sleep(task);
+}

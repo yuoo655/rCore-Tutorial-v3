@@ -25,7 +25,8 @@ use super::{
     INITPROC,
     take_current_task,
     TaskStatus,
-    WAIT_LOCK
+    WAIT_LOCK,
+    sleep_task
 };
 use spin::Mutex;
 
@@ -80,7 +81,7 @@ pub fn kthread_stop(){
 }
 #[no_mangle]
 pub fn do_exit(){
-    println!("kthread do exit");
+    // println!("kthread do exit");
     exit_kthread_and_run_next(0);
     panic!("Unreachable in sys_exit!");
 }
@@ -104,34 +105,23 @@ pub fn kernel_stackful_coroutine_test() {
 pub fn exit_kthread_and_run_next(exit_code: i32) {
     println!("exit_kthread_and_run_next");
 
-    let mut initproc_inner = INITPROC.inner_exclusive_access();
     let task = take_current_task().unwrap();
-
 
     // **** hold current PCB lock
     let wl = WAIT_LOCK.lock();
-
     let mut inner = task.inner_exclusive_access();
+    let task_cx_ptr = inner.get_task_cx_ptr();
 
     // Change status to Zombie
     inner.task_status = TaskStatus::Zombie;
-
     // Record exit code
     inner.exit_code = Some(exit_code);
 
-    //clean up children dealloc resources
-    inner.children.clear();
-    // deallocate user space
-    inner.memory_set.recycle_data_pages();
-    // deallocate fdtable
-    inner.fd_table.clear();
-
     drop(inner);
-    drop(task);
+    sleep_task(task.clone());
     drop(wl);
-    // we do not have to save task context
-    let mut _unused = TaskContext::zero_init();
-    schedule(&mut _unused as *mut _);
+    
+    schedule(task_cx_ptr);
 }
 
 
