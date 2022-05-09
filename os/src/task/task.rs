@@ -391,6 +391,7 @@ impl TaskControlBlock {
                 new_fd_table.push(None);
             }
         }
+
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             tgid: tgid,
@@ -406,7 +407,7 @@ impl TaskControlBlock {
                     children: Vec::new(),
                     exit_code: None,
                     fd_table: new_fd_table,
-                    signals: SignalFlags::empty(),
+                    signals: parent_inner.signals.clone(),
                     // inherit the signal_mask and signal_action
                     signal_mask: parent_inner.signal_mask,
                     handling_sig: -1,
@@ -414,9 +415,9 @@ impl TaskControlBlock {
                     killed: false,
                     frozen: false,
                     trap_ctx_backup: None,
-                    mutex_list: Vec::new(),
-                    semaphore_list: Vec::new(),
-                    condvar_list: Vec::new(),
+                    mutex_list: parent_inner.mutex_list.clone(),
+                    semaphore_list: parent_inner.semaphore_list.clone(),
+                    condvar_list: parent_inner.condvar_list.clone(),
                 })
             },
         });
