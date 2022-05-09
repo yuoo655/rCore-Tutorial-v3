@@ -321,23 +321,14 @@ impl MemorySet {
     }
 
     pub fn from_existed(user_space: &MemorySet, pid:usize) -> (Self, usize) {
-        let mut memory_set = Self::new_bare();
-        // map trampoline
-        memory_set.map_trampoline();
-        // copy data sections/trap_context/user_stack
-        for area in user_space.areas.iter() {
-            let new_area = MapArea::from_another(area);
-            memory_set.push(new_area, None);
-            // copy data from another space
-            for vpn in area.vpn_range {
-                let src_ppn = user_space.translate(vpn).unwrap().ppn();
-                let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
-                dst_ppn
-                    .get_bytes_array()
-                    .copy_from_slice(src_ppn.get_bytes_array());
-            }
-        }
-        
+    
+        let copy_areas = user_space.areas.clone();
+
+        let mut memory_set = Self{
+            page_table: PageTable::from_token(user_space.token()),
+            areas: copy_areas,
+        };
+
         // map user stack with U flags
         let user_stack_bottom = ustack_bottom_from_pid(pid);
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
@@ -366,12 +357,11 @@ impl MemorySet {
             None,
         );
 
-        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_pid(pid).into();
-        let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(trap_cx_bottom_va).into())
-            .unwrap()
-            .ppn();
-
+        // let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_pid(pid).into();
+        // let trap_cx_ppn = memory_set
+        //     .translate(VirtAddr::from(trap_cx_bottom_va).into())
+        //     .unwrap()
+        //     .ppn();
         // println!("new user thread trap_cx_ppn: {:#x?}", trap_cx_ppn);
         (
             memory_set,

@@ -46,7 +46,7 @@ pub fn sys_waittid(tid: usize) -> i32 {
     let pid = task.pid.0;
 
 
-    println!("wait pid:{}, current: pid={} tgid={}", tid,pid,tgid);
+    // println!("wait pid:{}, current: pid={} tgid={}", tid,pid,tgid);
 
     let waited_task = pid2task(tid);
 
