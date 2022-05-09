@@ -6,7 +6,8 @@ use crate::{
 use crate::task::{
     add_task_first_time,
     pid2task,
-    trap_cx_bottom_from_pid
+    trap_cx_bottom_from_pid,
+    remove_from_pid2task
 };
 
 
@@ -15,6 +16,7 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     let current_pid = current_task.pid.0;
 
     let new_task = current_task.new_user_thread(entry, arg, current_pid);
+
     let new_pid = new_task.pid.0;
 
     let cx = trap_cx_bottom_from_pid(new_pid);
@@ -46,30 +48,33 @@ pub fn sys_waittid(tid: usize) -> i32 {
     let pid = task.pid.0;
 
 
-    // println!("wait pid:{}, current: pid={} tgid={}", tid,pid,tgid);
+    println!("wait pid:{}, current: pid={} tgid={}", tid,pid,tgid);
 
     let waited_task = pid2task(tid);
 
+    // a thread cannot wait for itself
     if pid == tgid {
-        //return false
         return -1;
     }
 
+    
     let mut exit_code: Option<i32> = None;
 
-    if let Some(exitcode) = waited_task.unwrap().inner_exclusive_access().get_exit_code() {
-        // return thread's exit code
-        exit_code = Some(exitcode);
-
-        exit_code.unwrap();
-    }else {
-        // None
+    if let Some(waited_task) = waited_task {
+        
+        if let Some(waited_exit_code) = waited_task.inner_exclusive_access().get_exit_code(){
+            exit_code = Some(waited_exit_code);
+        }
+    } else {
+        // waited thread does not exist
         return -1;
     }
     if let Some(exit_code) = exit_code {
+
+        remove_from_pid2task(tid);
         exit_code
-    }else{
-        // has not exited yet
+    } else {
+        // waited thread has not exited
         -2
     }
 

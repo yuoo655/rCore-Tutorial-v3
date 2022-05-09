@@ -130,8 +130,12 @@ impl TaskControlBlock {
         let pid_handle = pid_alloc();
         let pid = pid_handle.0;
         let tgid = pid_handle.0;
-        // println!("new tcb pid {} tgid {}", pid, tgid);
+        println!("new tcb pid {} tgid {}", pid, tgid);
     
+        // memory_set with elf program headers/trampoline/trap context/user stack        
+        use riscv::register::sstatus;
+        let sstatus = sstatus::read();
+
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data, pid);
 
         // for tcb::new()   and tcb::exec()     
@@ -142,7 +146,7 @@ impl TaskControlBlock {
             .unwrap()
             .ppn();
 
-        // println!("new tcb trap_cx_ppn {:#x?}", trap_cx_ppn);
+        println!("new tcb trap_cx_ppn {:#x?}", trap_cx_ppn);
         //alloc a kernel stack in kernel space
 
         let kernel_stack = kstack_alloc();
@@ -359,7 +363,7 @@ impl TaskControlBlock {
 
         let tgid = parent_pid;
         
-        // println!("new user thread pid {} tgid {}", pid, tgid);
+        println!("new user thread pid {} tgid {}", pid, tgid);
 
         // ---- hold parent PCB lock
         let mut parent_inner = self.inner_exclusive_access();
@@ -440,9 +444,8 @@ impl TaskControlBlock {
             trap_handler as usize,
         );
 
-        let new_tcb_cx = inner.get_trap_cx();
-        *new_tcb_cx = trap_cx;
-        new_tcb_cx.x[10] = arg;
+        trap_cx.x[10] = arg;
+        *inner.get_trap_cx() = trap_cx;
         
         
         // println!("new user thread trap cx :{:#x?}", trap_cx);
@@ -458,7 +461,9 @@ impl TaskControlBlock {
         let pid_handle = PidHandle(pid);
         let tgid = kernel_tgid_alloc().0;
 
-        // println!("new kernel thread pid {} tgid {}", pid, tgid);
+        println!("new kernel thread pid {} tgid {}", pid, tgid);
+        // let kstack = KStack::new();
+        // let kstack_top = kstack.top();
         
         
         let trap_cx_bottom_va = kthread_trap_cx_bottom_from_tid(tgid);
@@ -469,7 +474,7 @@ impl TaskControlBlock {
         let kstack_top = stack_top_va;
         let kernel_stack = KernelStack(kstack_top);
 
-        // println!("insert trap_cx_bottom_va: {:#x?} trap_cx_top_va:{:#x?}", trap_cx_bottom_va, trap_cx_top_va);
+        println!("insert trap_cx_bottom_va: {:#x?} trap_cx_top_va:{:#x?}", trap_cx_bottom_va, trap_cx_top_va);
         // at least one page for trap_cx
         KERNEL_SPACE.exclusive_access().insert_identical_area(
             trap_cx_bottom_va.into(),
@@ -486,7 +491,9 @@ impl TaskControlBlock {
         let va: VirtAddr = trap_cx_bottom_va.into();
         let trap_cx_ppn = KERNEL_SPACE.exclusive_access().translate(va.into()).unwrap().ppn();
 
-
+        unsafe{
+            asm!("sfence.vma");
+        }
         let memory_set = MemorySet::kernel_copy();
 
         let mut context = TaskContext::zero_init();
@@ -502,6 +509,8 @@ impl TaskControlBlock {
         context.ra = entry as usize;
         context.sp = stack_top_va;
 
+
+        // let tcv = Arc::clone()
         // println!("task context: {:#x?}", context);
         let tcb = Arc::new(TaskControlBlock {
             pid: pid_handle,
