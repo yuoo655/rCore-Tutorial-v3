@@ -122,14 +122,7 @@ impl TaskControlBlock {
     }
 
     pub fn trap_cx_user_va(&self) -> usize {
-        let mut trap_cx_user_va = 0;
-        if self.pid.0 == self.tgid {
-            trap_cx_user_va = trap_cx_bottom_from_pid(0);
-        }else{
-            trap_cx_user_va = trap_cx_bottom_from_pid(self.pid.0);
-        }
-        trap_cx_user_va
-
+        trap_cx_bottom_from_pid(self.pid.0)
     }    
     pub fn new(elf_data: &[u8]) -> Self {
         // alloc a pid 
@@ -142,11 +135,11 @@ impl TaskControlBlock {
         use riscv::register::sstatus;
         let sstatus = sstatus::read();
 
-        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data, 0);
+        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data, pid);
 
         // for tcb::new()   and tcb::exec()     
         // ustack/trap_cx =  ustack_bottom_from_pid(0) trap_cx_bottom_from_pid(0)
-        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_pid(0 as usize).into();
+        let trap_cx_bottom_va: VirtAddr = trap_cx_bottom_from_pid(pid).into();
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(trap_cx_bottom_va).into())
             .unwrap()
@@ -276,7 +269,7 @@ impl TaskControlBlock {
         let parent_pid = self.pid.0;
         let pid_handle = pid_alloc();
         let pid = pid_handle.0;
-        let tgid = parent_pid;
+        let tgid = pid;
         // println!("new fork pid  {} tgid {}", pid, parent_pid);
 
 
@@ -371,9 +364,7 @@ impl TaskControlBlock {
         let pid_handle = pid_alloc();
         let pid = pid_handle.0;
 
-        
-        // let parent_pid = self.pid.0;
-        let tgid = parent_pid;
+        let tgid = pid;
         
         println!("new user thread pid {} tgid {}", pid, tgid);
 
