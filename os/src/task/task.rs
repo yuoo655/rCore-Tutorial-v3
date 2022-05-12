@@ -26,8 +26,6 @@ use crate::sync::{
     Semaphore,
     Condvar,
 };
-use riscv::register::sstatus::{self, Sstatus, SPP};
-
 use core::arch::asm;
 
 
@@ -55,9 +53,8 @@ use crate::task::{
 pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
-    pub kernel_stack: KernelStack,
     pub tgid: usize,
-
+    pub kernel_stack: KernelStack,
     // mutable
     inner: Mutex<TaskControlBlockInner>,
 }
@@ -86,6 +83,7 @@ pub struct TaskControlBlockInner {
     pub mutex_list: Vec<Option<Arc<dyn MyMutex>>>,
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    pub flags: usize,
 }
 
 impl TaskControlBlockInner {
@@ -130,12 +128,9 @@ impl TaskControlBlock {
         let pid_handle = pid_alloc();
         let pid = pid_handle.0;
         let tgid = pid_handle.0;
-        println!("new tcb pid {} tgid {}", pid, tgid);
+        // println!("new tcb pid {} tgid {}", pid, tgid);
     
         // memory_set with elf program headers/trampoline/trap context/user stack        
-        use riscv::register::sstatus;
-        let sstatus = sstatus::read();
-
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data, pid);
 
         // for tcb::new()   and tcb::exec()     
@@ -146,7 +141,7 @@ impl TaskControlBlock {
             .unwrap()
             .ppn();
 
-        println!("new tcb trap_cx_ppn {:#x?}", trap_cx_ppn);
+        // println!("new tcb trap_cx_ppn {:#x?}", trap_cx_ppn);
         //alloc a kernel stack in kernel space
 
         let kernel_stack = kstack_alloc();
@@ -187,6 +182,7 @@ impl TaskControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    flags: 0,
                 })
             },
         };
@@ -208,7 +204,6 @@ impl TaskControlBlock {
 
         let parent_pid = self.pid.0;
 
-        // println!("new exec");
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, mut user_sp, entry_point) = MemorySet::from_elf(elf_data, parent_pid);
 
@@ -329,6 +324,7 @@ impl TaskControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    flags: 0,
                 })
             },
         });
@@ -408,7 +404,6 @@ impl TaskControlBlock {
                     exit_code: None,
                     fd_table: new_fd_table,
                     signals: parent_inner.signals.clone(),
-                    // inherit the signal_mask and signal_action
                     signal_mask: parent_inner.signal_mask,
                     handling_sig: -1,
                     signal_actions: parent_inner.signal_actions.clone(),
@@ -418,6 +413,7 @@ impl TaskControlBlock {
                     mutex_list: parent_inner.mutex_list.clone(),
                     semaphore_list: parent_inner.semaphore_list.clone(),
                     condvar_list: parent_inner.condvar_list.clone(),
+                    flags: 0,
                 })
             },
         });
@@ -455,18 +451,15 @@ impl TaskControlBlock {
         task_control_block
     }
 
-    pub fn new_kernel_thread(entry: usize) -> Arc<TaskControlBlock> {
+    pub fn kthreadd_create(entry: usize) -> Arc<TaskControlBlock> {
 
-        // alloc a pid 
+        // kthreaddd pid is 0  tgid = unique
         let pid = 0;
         let pid_handle = PidHandle(pid);
         let tgid = kernel_tgid_alloc().0;
 
-        println!("new kernel thread pid {} tgid {}", pid, tgid);
-        // let kstack = KStack::new();
-        // let kstack_top = kstack.top();
-        
-        
+        println!("kthreadd create pid {} tgid {}", pid, tgid);
+
         let trap_cx_bottom_va = kthread_trap_cx_bottom_from_tid(tgid);
         let trap_cx_top_va = trap_cx_bottom_va + PAGE_SIZE;
         
@@ -475,8 +468,7 @@ impl TaskControlBlock {
         let kstack_top = stack_top_va;
         let kernel_stack = KernelStack(kstack_top);
 
-        println!("insert trap_cx_bottom_va: {:#x?} trap_cx_top_va:{:#x?}", trap_cx_bottom_va, trap_cx_top_va);
-        // at least one page for trap_cx
+        // println!("insert trap_cx_bottom_va: {:#x?} trap_cx_top_va:{:#x?}", trap_cx_bottom_va, trap_cx_top_va);
         KERNEL_SPACE.exclusive_access().insert_identical_area(
             trap_cx_bottom_va.into(),
             trap_cx_top_va.into(),
@@ -501,11 +493,6 @@ impl TaskControlBlock {
         let context_va = &context as *const TaskContext as usize;
         let context_pa = PhysAddr::from(context_va);
         let context_ppn = context_pa.floor();
-
-
-        extern "C" {
-            fn __restore_k();
-        }
 
         context.ra = entry as usize;
         context.sp = stack_top_va;
@@ -539,6 +526,7 @@ impl TaskControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    flags: 0,
                 })
             },
         );
@@ -546,6 +534,112 @@ impl TaskControlBlock {
         let mut trap_cx_precreate = new_kthread_trap_cx(entry, kstack_top);
         let cx = tcb.inner_exclusive_access().get_trap_cx();
         *cx = trap_cx_precreate;
+        // println!("cx: {:#x?}", cx);
+        tcb
+
+    }
+
+    pub fn new_kernel_thread(self: &Arc<TaskControlBlock>, entry: usize, arg: usize) -> Arc<TaskControlBlock> {
+
+        // normal kthread
+        // pid = unique
+        // tgid = unique
+
+        let pid_handle = pid_alloc();
+        let tgid = kernel_tgid_alloc().0;
+        let pid = pid_handle.0;
+        println!("new kthread pid {} tgid {}", pid, tgid);
+
+        let trap_cx_bottom_va = kthread_trap_cx_bottom_from_tid(tgid);
+        let trap_cx_top_va = trap_cx_bottom_va + PAGE_SIZE;
+        
+        let stack_bottom_va = kthread_stack_bottom_from_tid(tgid);
+        let stack_top_va = stack_bottom_va + 0x8000;
+        let kstack_top = stack_top_va;
+        let kernel_stack = KernelStack(kstack_top);
+
+        // println!("insert trap_cx_bottom_va: {:#x?} trap_cx_top_va:{:#x?}", trap_cx_bottom_va, trap_cx_top_va);
+        KERNEL_SPACE.exclusive_access().insert_identical_area(
+            trap_cx_bottom_va.into(),
+            trap_cx_top_va.into(),
+            MapPermission::R | MapPermission::W ,
+        );
+
+        KERNEL_SPACE.exclusive_access().insert_identical_area(
+            stack_bottom_va.into(),
+            stack_top_va.into(),
+            MapPermission::R | MapPermission::W ,
+        );
+
+        unsafe {
+            asm!("sfence.vma");
+        }
+
+        let va: VirtAddr = trap_cx_bottom_va.into();
+        let trap_cx_ppn = KERNEL_SPACE.exclusive_access().translate(va.into()).unwrap().ppn();
+
+        let memory_set = MemorySet::kernel_copy();
+        let mut context = TaskContext::zero_init();
+        let context_va = &context as *const TaskContext as usize;
+        let context_pa = PhysAddr::from(context_va);
+        let context_ppn = context_pa.floor();
+
+        context.ra = entry as usize;
+        context.sp = stack_top_va;
+
+
+        // kthread's parent lock
+        let mut kthreadd_inner = self.inner_exclusive_access();
+
+        let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
+        for fd in kthreadd_inner.fd_table.iter() {
+            if let Some(file) = fd {
+                new_fd_table.push(Some(file.clone()));
+            } else {
+                new_fd_table.push(None);
+            }
+        }
+
+        let tcb = Arc::new(TaskControlBlock {
+            pid: pid_handle,
+            tgid: tgid,
+            kernel_stack,
+            inner: Mutex::new(
+                TaskControlBlockInner {
+                    trap_cx_ppn,
+                    base_size: 0,
+                    task_cx: context,
+                    task_status: TaskStatus::Ready,
+                    memory_set,
+                    parent: Some(Arc::downgrade(self)),
+                    children: Vec::new(),
+                    exit_code: None,
+                    fd_table: new_fd_table,
+                    signals: kthreadd_inner.signals.clone(),
+                    signal_mask: kthreadd_inner.signal_mask,
+                    handling_sig: -1,
+                    signal_actions: kthreadd_inner.signal_actions.clone(),
+                    killed: false,
+                    frozen: false,
+                    trap_ctx_backup: None,
+                    mutex_list: kthreadd_inner.mutex_list.clone(),
+                    semaphore_list: kthreadd_inner.semaphore_list.clone(),
+                    condvar_list: kthreadd_inner.condvar_list.clone(),
+                    flags: 0,
+                })
+            },
+        );
+
+        insert_into_pid2task(pid, tcb.clone());
+
+        // add child
+        kthreadd_inner.children.push(tcb.clone());
+
+        let mut trap_cx_precreate = new_kthread_trap_cx(entry, kstack_top);
+        let cx = tcb.inner_exclusive_access().get_trap_cx();
+        *cx = trap_cx_precreate;
+        cx.x[10] = arg;
+
         // println!("cx: {:#x?}", cx);
         tcb
     }

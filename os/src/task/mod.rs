@@ -7,7 +7,8 @@ mod pid;
 mod pool;
 mod action;
 mod signal;
-mod kthread;
+pub mod kthread;
+pub mod kthread_test;
 
 use crate::fs::{open_file, OpenFlags};
 use switch::__switch;
@@ -44,12 +45,17 @@ pub use manager::{
 
 pub use kthread::{
     TgidHandle, kernel_tgid_alloc,
-    kernel_stackful_coroutine_test,
     kthread_trap_cx_bottom_from_tid,
     kthread_stack_bottom_from_tid,
+    kthreadd_create,
+    // kernel_stackful_coroutine_test,
 };
 
-use spin::Mutex;
+pub use kthread_test::{
+    kthread_test_sem
+};
+
+use lock::Mutex;
 
 lazy_static! {
     pub static ref WAIT_LOCK: Mutex<()> = Mutex::new(());
@@ -62,11 +68,11 @@ pub fn suspend_current_and_run_next() {
     let task = current_task().unwrap();
     let mut task_inner = task.inner_exclusive_access();
     let task_cx_ptr = task_inner.get_task_cx_ptr();
-    // let task_cx_ptr = task_inner.gets_task_cx_ptr();
+    // Change status to Ready
+    task_inner.task_status = TaskStatus::Ready;
     drop(task_inner);
 
     // jump to scheduling cycle
-    // add_task(task);
     schedule(task_cx_ptr);
 }
 

@@ -19,6 +19,7 @@ k210-soc = { git = "https://github.com/wyfcyx/k210-soc" }
 easy-fs = { path = "../easy-fs" }
 log = { version = "0.4.4"}
 spin = { version = "0.9", features = ["use_ticket_mutex"] }
+lock = { git = "https://gitee.com/chyyuu/kernel-sync.git"}
 
 
 [features]

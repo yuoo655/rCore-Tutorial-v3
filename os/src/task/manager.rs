@@ -2,7 +2,7 @@ use super::TaskControlBlock;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use lazy_static::*;
-use spin::Mutex;
+use lock::Mutex;
 use alloc::collections::{BTreeMap};
 
 pub struct TaskManager {

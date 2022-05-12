@@ -67,8 +67,9 @@ pub fn rust_main(hart_id: usize) -> ! {
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
         fs::list_apps();
+        task::kthread::kthreadd_create();
+        task::kthread_test::kthread_test();
         task::add_initproc();
-        task::kernel_stackful_coroutine_test();
 
         
         AP_CAN_INIT.store(true, Ordering::Relaxed);

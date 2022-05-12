@@ -1,5 +1,4 @@
-use core::cell::{RefCell, RefMut};
-use spin::{Mutex, MutexGuard};
+use lock::{Mutex, MutexGuard};
 
 /// Wrap a static data structure inside it so that we are
 /// able to access it without any `unsafe`.

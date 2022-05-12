@@ -2,12 +2,12 @@ use core::cmp::Ordering;
 
 use crate::config::CLOCK_FREQ;
 use crate::sbi::set_timer;
-use crate::sync::UPSafeCell;
 use crate::task::{add_task, TaskControlBlock};
 use alloc::collections::BinaryHeap;
 use alloc::sync::Arc;
 use lazy_static::*;
 use riscv::register::time;
+use lock::Mutex;
 
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
@@ -50,7 +50,7 @@ impl Ord for TimerCondVar {
 }
 
 lazy_static! {
-    static ref TIMERS: spin::Mutex<BinaryHeap<TimerCondVar>> = spin::Mutex::new(BinaryHeap::<TimerCondVar>::new());
+    static ref TIMERS: Mutex<BinaryHeap<TimerCondVar>> = Mutex::new(BinaryHeap::<TimerCondVar>::new());
 }
 
 pub fn add_timer(expire_ms: usize, task: Arc<TaskControlBlock>) {

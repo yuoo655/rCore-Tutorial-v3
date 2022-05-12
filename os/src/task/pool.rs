@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeSet, sync::Arc};
 use lazy_static::*;
-use spin::Mutex;
+use lock::Mutex;
 
 use super::{manager::TaskManager, task::TaskControlBlock};
 

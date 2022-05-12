@@ -5,7 +5,7 @@ use {
 
 use core::fmt::{Arguments, Result, Write};
 use core::arch::asm;
-use spin::Mutex;
+use lock::Mutex;
 
 struct Console;
 

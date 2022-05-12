@@ -61,7 +61,7 @@ pub fn trap_handler() -> ! {
             cx.sepc += 4;        
             // get system call return value
             unsafe{
-                sstatus::set_spie();
+                sstatus::set_sie();
             }
             let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
             // cx is changed during sys_exec, so we have to call it again
@@ -126,8 +126,8 @@ pub fn trap_return() -> ! {
     let restore_va = __restore as usize - __alltraps as usize + TRAMPOLINE;
 
     unsafe {
-        sstatus::set_spie();
-        sstatus::set_spp(sstatus::SPP::User);
+        // sstatus::set_spie();
+        // sstatus::set_spp(sstatus::SPP::User);
         asm!(
             "fence.i",
             "jr {restore_va}",
@@ -159,7 +159,16 @@ pub fn trap_from_kernel(_trap_cx: &TrapContext) {
         },
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             set_next_trigger();
-            // check_timer();
+            check_timer();
+            unsafe {
+                TICKS += 1;
+                if TICKS == 500 {
+                    TICKS = 0;
+                    println!("* 500 ticks *");
+                }
+            }
+            // suspend_current_and_run_next();
+
         },
         _ => {
             panic!(
