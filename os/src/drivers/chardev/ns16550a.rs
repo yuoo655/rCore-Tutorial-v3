@@ -8,6 +8,7 @@ use crate::task::schedule;
 use alloc::collections::VecDeque;
 use bitflags::*;
 use volatile::{ReadOnly, Volatile, WriteOnly};
+use lock::Mutex;
 
 bitflags! {
     /// InterruptEnableRegister
@@ -126,7 +127,7 @@ struct NS16550aInner {
 }
 
 pub struct NS16550a<const BASE_ADDR: usize> {
-    inner: UPIntrFreeCell<NS16550aInner>,
+    inner: Mutex<NS16550aInner>,
     condvar: Condvar,
 }
 
@@ -138,7 +139,7 @@ impl<const BASE_ADDR: usize> NS16550a<BASE_ADDR> {
         };
         inner.ns16550a.init();
         Self {
-            inner: unsafe { UPIntrFreeCell::new(inner) },
+            inner: unsafe { Mutex::new(inner) },
             condvar: Condvar::new(),
         }
     }
@@ -147,7 +148,7 @@ impl<const BASE_ADDR: usize> NS16550a<BASE_ADDR> {
 impl<const BASE_ADDR: usize> CharDevice for NS16550a<BASE_ADDR> {
     fn read(&self) -> u8 {
         loop {
-            let mut inner = self.inner.exclusive_access();
+            let mut inner = self.inner.lock();
             if let Some(ch) = inner.read_buffer.pop_front() {
                 return ch;
             } else {
@@ -158,17 +159,18 @@ impl<const BASE_ADDR: usize> CharDevice for NS16550a<BASE_ADDR> {
         }
     }
     fn write(&self, ch: u8) {
-        let mut inner = self.inner.exclusive_access();
+        let mut inner = self.inner.lock();
         inner.ns16550a.write(ch);
     }
     fn handle_irq(&self) {
         let mut count = 0;
-        self.inner.exclusive_session(|inner| {
-            while let Some(ch) = inner.ns16550a.read() {
-                count += 1;
-                inner.read_buffer.push_back(ch);
-            }
-        });
+        let mut inner = self.inner.lock();
+        
+        while let Some(ch) = inner.ns16550a.read() {
+            count += 1;
+            inner.read_buffer.push_back(ch);
+        };
+        
         if count > 0 {
             self.condvar.signal();
         }

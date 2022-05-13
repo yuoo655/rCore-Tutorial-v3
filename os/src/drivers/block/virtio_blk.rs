@@ -10,6 +10,7 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use lazy_static::*;
 use virtio_drivers::{BlkResp, RespStatus, VirtIOBlk, VirtIOHeader};
+use lock::Mutex;
 
 #[allow(unused)]
 const VIRTIO0: usize = 0x10001000;
@@ -20,60 +21,31 @@ pub struct VirtIOBlock {
 }
 
 lazy_static! {
-    static ref QUEUE_FRAMES: UPIntrFreeCell<Vec<FrameTracker>> = unsafe { UPIntrFreeCell::new(Vec::new()) };
+    static ref QUEUE_FRAMES: Mutex<Vec<FrameTracker>> = Mutex::new(Vec::new());
 }
 
 impl BlockDevice for VirtIOBlock {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        let nb = *DEV_NON_BLOCKING_ACCESS.exclusive_access();
-        if nb {
-            let mut resp = BlkResp::default();
-            let task_cx_ptr = self.virtio_blk.exclusive_session(|blk| {
-                let token = unsafe { blk.read_block_nb(block_id, buf, &mut resp).unwrap() };
-                self.condvars.get(&token).unwrap().wait_no_sched()
-            });
-            schedule(task_cx_ptr);
-            assert_eq!(
-                resp.status(),
-                RespStatus::Ok,
-                "Error when reading VirtIOBlk"
-            );
-        } else {
-            self.virtio_blk
-                .exclusive_access()
-                .read_block(block_id, buf)
-                .expect("Error when reading VirtIOBlk");
-        }
+        self.virtio_blk
+            .exclusive_access()
+            .read_block(block_id, buf)
+            .expect("Error when reading VirtIOBlk");
     }
     fn write_block(&self, block_id: usize, buf: &[u8]) {
-        let nb = *DEV_NON_BLOCKING_ACCESS.exclusive_access();
-        if nb {
-            let mut resp = BlkResp::default();
-            let task_cx_ptr = self.virtio_blk.exclusive_session(|blk| {
-                let token = unsafe { blk.write_block_nb(block_id, buf, &mut resp).unwrap() };
-                self.condvars.get(&token).unwrap().wait_no_sched()
-            });
-            schedule(task_cx_ptr);
-            assert_eq!(
-                resp.status(),
-                RespStatus::Ok,
-                "Error when writing VirtIOBlk"
-            );
-        } else {
-            self.virtio_blk
-                .exclusive_access()
-                .write_block(block_id, buf)
-                .expect("Error when writing VirtIOBlk");
-        }
+        self.virtio_blk
+            .exclusive_access()
+            .write_block(block_id, buf)
+            .expect("Error when writing VirtIOBlk");
     }
+
     fn handle_irq(&self) {
-        self.virtio_blk.exclusive_session(|blk| {
-            while let Ok(token) = blk.pop_used() {
-                self.condvars.get(&token).unwrap().signal();
-            }
-        });
+        // self.0.exclusive_access().handle_irq();
     }
 }
+
+
+
+
 
 impl VirtIOBlock {
     pub fn new() -> Self {
@@ -102,7 +74,7 @@ pub extern "C" fn virtio_dma_alloc(pages: usize) -> PhysAddr {
             ppn_base = frame.ppn;
         }
         assert_eq!(frame.ppn.0, ppn_base.0 + i);
-        QUEUE_FRAMES.exclusive_access().push(frame);
+        QUEUE_FRAMES.lock().push(frame);
     }
     ppn_base.into()
 }
@@ -128,3 +100,6 @@ pub extern "C" fn virtio_virt_to_phys(vaddr: VirtAddr) -> PhysAddr {
         .translate_va(vaddr)
         .unwrap()
 }
+
+
+

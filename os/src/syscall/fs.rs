@@ -1,11 +1,11 @@
 use crate::fs::{make_pipe, open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
-use crate::task::{current_process, current_user_token};
+use crate::task::{current_user_token, current_task, current_trap_cx};
 use alloc::sync::Arc;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
-    let process = current_process();
+    let process = current_task().unwrap();
     let inner = process.inner_exclusive_access();
     if fd >= inner.fd_table.len() {
         return -1;
@@ -25,7 +25,7 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
 
 pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
-    let process = current_process();
+    let process = current_task().unwrap();
     let inner = process.inner_exclusive_access();
     if fd >= inner.fd_table.len() {
         return -1;
@@ -44,7 +44,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
 }
 
 pub fn sys_open(path: *const u8, flags: u32) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let token = current_user_token();
     let path = translated_str(token, path);
     if let Some(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
@@ -58,7 +58,7 @@ pub fn sys_open(path: *const u8, flags: u32) -> isize {
 }
 
 pub fn sys_close(fd: usize) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let mut inner = process.inner_exclusive_access();
     if fd >= inner.fd_table.len() {
         return -1;
@@ -71,7 +71,7 @@ pub fn sys_close(fd: usize) -> isize {
 }
 
 pub fn sys_pipe(pipe: *mut usize) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let token = current_user_token();
     let mut inner = process.inner_exclusive_access();
     let (pipe_read, pipe_write) = make_pipe();
@@ -85,7 +85,7 @@ pub fn sys_pipe(pipe: *mut usize) -> isize {
 }
 
 pub fn sys_dup(fd: usize) -> isize {
-    let process = current_process();
+    let process = current_task().unwrap();
     let mut inner = process.inner_exclusive_access();
     if fd >= inner.fd_table.len() {
         return -1;

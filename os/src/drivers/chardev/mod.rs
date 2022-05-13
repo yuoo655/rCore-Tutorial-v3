@@ -5,6 +5,7 @@ pub use ns16550a::NS16550a;
 use crate::board::CharDeviceImpl;
 use alloc::sync::Arc;
 use lazy_static::*;
+use lock::Mutex;
 
 pub trait CharDevice {
     fn read(&self) -> u8;

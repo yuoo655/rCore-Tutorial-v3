@@ -7,11 +7,12 @@ use alloc::vec::Vec;
 use bitflags::*;
 use easy_fs::{EasyFileSystem, Inode};
 use lazy_static::*;
+use lock::Mutex;
 
 pub struct OSInode {
     readable: bool,
     writable: bool,
-    inner: UPIntrFreeCell<OSInodeInner>,
+    inner: Mutex<OSInodeInner>,
 }
 
 pub struct OSInodeInner {
@@ -24,11 +25,11 @@ impl OSInode {
         Self {
             readable,
             writable,
-            inner: unsafe { UPIntrFreeCell::new(OSInodeInner { offset: 0, inode }) },
+            inner: unsafe { Mutex::new(OSInodeInner { offset: 0, inode }) },
         }
     }
     pub fn read_all(&self) -> Vec<u8> {
-        let mut inner = self.inner.exclusive_access();
+        let mut inner = self.inner.lock();
         let mut buffer = [0u8; 512];
         let mut v: Vec<u8> = Vec::new();
         loop {
@@ -113,7 +114,7 @@ impl File for OSInode {
         self.writable
     }
     fn read(&self, mut buf: UserBuffer) -> usize {
-        let mut inner = self.inner.exclusive_access();
+        let mut inner = self.inner.lock();
         let mut total_read_size = 0usize;
         for slice in buf.buffers.iter_mut() {
             let read_size = inner.inode.read_at(inner.offset, *slice);
@@ -126,7 +127,7 @@ impl File for OSInode {
         total_read_size
     }
     fn write(&self, buf: UserBuffer) -> usize {
-        let mut inner = self.inner.exclusive_access();
+        let mut inner = self.inner.lock();
         let mut total_write_size = 0usize;
         for slice in buf.buffers.iter() {
             let write_size = inner.inode.write_at(inner.offset, *slice);

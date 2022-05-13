@@ -1,9 +1,10 @@
 use crate::sync::UPIntrFreeCell;
 use crate::task::{add_task, block_current_and_run_next, current_task, TaskControlBlock};
 use alloc::{collections::VecDeque, sync::Arc};
+use lock::Mutex;
 
 pub struct Semaphore {
-    pub inner: UPIntrFreeCell<SemaphoreInner>,
+    pub inner: Mutex<SemaphoreInner>,
 }
 
 pub struct SemaphoreInner {
@@ -15,7 +16,7 @@ impl Semaphore {
     pub fn new(res_count: usize) -> Self {
         Self {
             inner: unsafe {
-                UPIntrFreeCell::new(SemaphoreInner {
+                Mutex::new(SemaphoreInner {
                     count: res_count as isize,
                     wait_queue: VecDeque::new(),
                 })
@@ -24,7 +25,7 @@ impl Semaphore {
     }
 
     pub fn up(&self) {
-        let mut inner = self.inner.exclusive_access();
+        let mut inner = self.inner.lock();
         inner.count += 1;
         if inner.count <= 0 {
             if let Some(task) = inner.wait_queue.pop_front() {
@@ -34,7 +35,7 @@ impl Semaphore {
     }
 
     pub fn down(&self) {
-        let mut inner = self.inner.exclusive_access();
+        let mut inner = self.inner.lock();
         inner.count -= 1;
         if inner.count < 0 {
             inner.wait_queue.push_back(current_task().unwrap());

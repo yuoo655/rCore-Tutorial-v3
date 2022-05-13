@@ -1,10 +1,11 @@
 use super::{PhysAddr, PhysPageNum};
 use crate::config::MEMORY_END;
-use crate::sync::UPIntrFreeCell;
+use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
 use lazy_static::*;
 
+#[derive(Clone)]
 pub struct FrameTracker {
     pub ppn: PhysPageNum,
 }
@@ -83,17 +84,18 @@ impl FrameAllocator for StackFrameAllocator {
 type FrameAllocatorImpl = StackFrameAllocator;
 
 lazy_static! {
-    pub static ref FRAME_ALLOCATOR: UPIntrFreeCell<FrameAllocatorImpl> =
-        unsafe { UPIntrFreeCell::new(FrameAllocatorImpl::new()) };
+    pub static ref FRAME_ALLOCATOR: UPSafeCell<FrameAllocatorImpl> =
+        unsafe { UPSafeCell::new(FrameAllocatorImpl::new()) };
 }
 
 pub fn init_frame_allocator() {
     extern "C" {
         fn ekernel();
     }
+    
     FRAME_ALLOCATOR.exclusive_access().init(
         PhysAddr::from(ekernel as usize).ceil(),
-        PhysAddr::from(MEMORY_END).floor(),
+        PhysAddr::from(MEMORY_END + 0x400000).floor(),
     );
 }
 

@@ -1,54 +1,9 @@
-use core::cell::{RefCell, RefMut, UnsafeCell};
+// use core::cell::{RefCell, RefMut, UnsafeCell};
 use core::ops::{Deref, DerefMut};
 use riscv::register::sstatus;
 use lazy_static::*;
+use lock::{Mutex, MutexGuard};
 
-/*
-/// Wrap a static data structure inside it so that we are
-/// able to access it without any `unsafe`.
-///
-/// We should only use it in uniprocessor.
-///
-/// In order to get mutable reference of inner data, call
-/// `exclusive_access`.
-pub struct UPSafeCell<T> {
-    /// inner data
-    inner: RefCell<T>,
-}
-
-unsafe impl<T> Sync for UPSafeCell<T> {}
-
-impl<T> UPSafeCell<T> {
-    /// User is responsible to guarantee that inner struct is only used in
-    /// uniprocessor.
-    pub unsafe fn new(value: T) -> Self {
-        Self {
-            inner: RefCell::new(value),
-        }
-    }
-    /// Panic if the data has been borrowed.
-    pub fn exclusive_access(&self) -> RefMut<'_, T> {
-        self.inner.borrow_mut()
-    }
-}
-*/
-
-pub struct UPSafeCellRaw<T> {
-    inner: UnsafeCell<T>,
-}
-
-unsafe impl<T> Sync for UPSafeCellRaw<T> {}
-
-impl<T> UPSafeCellRaw<T> {
-    pub unsafe fn new(value: T) -> Self {
-        Self {
-            inner: UnsafeCell::new(value),
-        }
-    }
-    pub fn get_mut(&self) -> &mut T {
-        unsafe { &mut (*self.inner.get()) }
-    }
-}
 
 pub struct IntrMaskingInfo {
     nested_level: usize,
@@ -56,8 +11,8 @@ pub struct IntrMaskingInfo {
 }
 
 lazy_static! {
-    static ref INTR_MASKING_INFO: UPSafeCellRaw<IntrMaskingInfo> = unsafe {
-        UPSafeCellRaw::new(IntrMaskingInfo::new()) 
+    static ref INTR_MASKING_INFO: UPSafeCell<IntrMaskingInfo> = unsafe {
+        UPSafeCell::new(IntrMaskingInfo::new()) 
     };
 }
 
@@ -88,23 +43,24 @@ impl IntrMaskingInfo {
 
 pub struct UPIntrFreeCell<T> {
     /// inner data
-    inner: RefCell<T>,
+    inner: lock::Mutex<T>,
 }
+
 
 unsafe impl<T> Sync for UPIntrFreeCell<T> {}
 
-pub struct UPIntrRefMut<'a, T>(Option<RefMut<'a, T>>);
+pub struct UPIntrRefMut<'a, T>(Option<MutexGuard<'a, T>>);
 
 impl<T> UPIntrFreeCell<T> {
     pub unsafe fn new(value: T) -> Self {
         Self {
-            inner: RefCell::new(value),
+            inner: lock::Mutex::new(value),
         }
     }
     /// Panic if the data has been borrowed.
-    pub fn exclusive_access(&self) -> UPIntrRefMut<'_, T> {
-        INTR_MASKING_INFO.get_mut().enter();
-        UPIntrRefMut(Some(self.inner.borrow_mut()))
+    pub fn exclusive_access(&self) -> MutexGuard<T> {
+        INTR_MASKING_INFO.exclusive_access().enter();
+        self.inner.lock()
     }
 
     pub fn exclusive_session<F, V>(&self, f: F) -> V where F: FnOnce(&mut T) -> V {
@@ -116,7 +72,7 @@ impl<T> UPIntrFreeCell<T> {
 impl<'a, T> Drop for UPIntrRefMut<'a, T> {
     fn drop(&mut self) {
         self.0 = None;
-        INTR_MASKING_INFO.get_mut().exit();
+        INTR_MASKING_INFO.exclusive_access().exit();
     }
 }
 
@@ -132,3 +88,24 @@ impl<'a, T> DerefMut for UPIntrRefMut<'a, T> {
     }
 }
 
+
+pub struct UPSafeCell<T> {
+    /// inner data
+    inner: Mutex<T>,
+}
+
+unsafe impl<T> Sync for UPSafeCell<T> {}
+
+impl<T> UPSafeCell<T> {
+    /// User is responsible to guarantee that inner struct is only used in
+    /// uniprocessor.
+    pub unsafe fn new(value: T) -> Self {
+        Self {
+            inner: Mutex::new(value),
+        }
+    }
+    /// Panic if the data has been borrowed.
+    pub fn exclusive_access(&self) -> MutexGuard<T> {
+        self.inner.lock()
+    }
+}
