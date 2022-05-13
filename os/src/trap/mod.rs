@@ -160,13 +160,13 @@ pub fn trap_from_kernel(_trap_cx: &TrapContext) {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             set_next_trigger();
             check_timer();
-            unsafe {
-                TICKS += 1;
-                if TICKS == 500 {
-                    TICKS = 0;
-                    println!("* 500 ticks *");
-                }
-            }
+            // unsafe {
+            //     TICKS += 1;
+            //     if TICKS == 500 {
+            //         TICKS = 0;
+            //         println!("* 500 ticks *");
+            //     }
+            // }
             // suspend_current_and_run_next();
 
         },

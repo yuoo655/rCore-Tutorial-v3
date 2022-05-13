@@ -80,7 +80,7 @@ pub fn kthread_runs_until_rec_kthread_stop(){
 pub fn kthread_stop_test(){
     let time_start = get_time_ms();
 
-    while get_time_ms() - time_start < 1000 {
+    while get_time_ms() - time_start < 100 {
     }
     println!("sending kthread_stop to kthread {}", 3);
     send_kthread_stop(3);

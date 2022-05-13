@@ -90,19 +90,21 @@ pub fn block_current_and_run_next() {
 
 pub fn exit_current_and_run_next(exit_code: i32) {
     
-    // ++++++ hold initproc PCB lock here
-    let mut initproc_inner = INITPROC.inner_exclusive_access();
-
+    
     // take from Processor
     let task = take_current_task().unwrap();
-
-
+    
+    
     let pid = task.pid.0;
     let tgid = task.tgid;
-
-    // **** hold current PCB lock
+    
     let wl = WAIT_LOCK.lock();
+    
+    // **** hold current PCB lock
     let mut inner = task.inner_exclusive_access();
+    
+    // ++++++ hold initproc PCB lock here
+    let mut initproc_inner = INITPROC.inner_exclusive_access();
 
     // Change status to Zombie
     inner.task_status = TaskStatus::Zombie;
