@@ -13,8 +13,7 @@
 
 use core::arch::global_asm;
 
-#[macro_use]
-extern crate log;
+
 #[macro_use]
 mod console;
 
@@ -58,7 +57,6 @@ pub fn rust_main(hart_id: usize) -> ! {
             fn boot_stack_top();      // stack top
         }
         clear_bss();
-        console::init();
         println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
         println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
         println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
@@ -81,6 +79,8 @@ pub fn rust_main(hart_id: usize) -> ! {
         init_other_cpu();
     }
 
+
+    println!("{}", hart_id);
     loop {
         spin_loop();
     }
@@ -93,17 +93,7 @@ pub fn init_other_cpu(){
         while !AP_CAN_INIT.load(Ordering::Relaxed) {
             hint::spin_loop();
         }
-        others_main();
-        unsafe {
-            let sp: usize;
-            asm!("mv {}, sp", out(reg) sp);
-            println!("hart[{:?}] init done sp:{:x?}", hart_id,  sp);
-            println!("hart[{:?}] Hello, world!", hart_id);
-        }
     }
-}
-
-pub fn others_main(){
 }
 
 pub fn hart_id() -> usize {
