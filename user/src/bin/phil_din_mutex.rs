@@ -70,6 +70,8 @@ pub fn main() -> i32 {
     let start = get_time_u();
     for i in 0..N {
         assert_eq!(mutex_blocking_create(), i as isize);
+    }
+    for i in 0..N {
         v.push(thread_create(
             philosopher_dining_problem as usize,
             &ids.as_slice()[i] as *const _ as usize,
