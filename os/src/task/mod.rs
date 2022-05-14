@@ -8,15 +8,16 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use self::id::TaskUserRes;
 use crate::fs::{open_file, OpenFlags};
-use alloc::sync::Arc;
+use alloc::{sync::Arc, vec::Vec};
 use lazy_static::*;
 use manager::fetch_task;
 use process::ProcessControlBlock;
 use switch::__switch;
 
 pub use context::TaskContext;
-pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
+pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle, IDLE_PID};
 pub use manager::{add_task, pid2process, remove_from_pid2process};
 pub use processor::{
     current_kstack_top, current_process, current_task, current_trap_cx, current_trap_cx_user_va,
@@ -52,7 +53,7 @@ pub fn block_current_task() -> *mut TaskContext {
 }
 
 pub fn block_current_and_run_next() {
-    let task_cx_ptr = block_current_task(); 
+    let task_cx_ptr = block_current_task();
     schedule(task_cx_ptr);
 }
 
@@ -71,7 +72,12 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     // however, if this is the main thread of current process
     // the process should terminate at once
     if tid == 0 {
-        remove_from_pid2process(process.getpid());
+        let pid = process.getpid();
+        if pid == IDLE_PID {
+            println!("[kernel] Idle process exit ...");
+            crate::sbi::shutdown();
+        }
+        remove_from_pid2process(pid);
         let mut process_inner = process.inner_exclusive_access();
         // mark this process as a zombie process
         process_inner.is_zombie = true;
@@ -90,12 +96,21 @@ pub fn exit_current_and_run_next(exit_code: i32) {
         // deallocate user res (including tid/trap_cx/ustack) of all threads
         // it has to be done before we dealloc the whole memory_set
         // otherwise they will be deallocated twice
+        let mut recycle_res = Vec::<TaskUserRes>::new();
         for task in process_inner.tasks.iter().filter(|t| t.is_some()) {
             let task = task.as_ref().unwrap();
             let mut task_inner = task.inner_exclusive_access();
-            task_inner.res = None;
+            if let Some(res) = task_inner.res.take() {
+                recycle_res.push(res);
+            }
         }
+        // dealloc_tid and dealloc_user_res require access to PCB inner, so we
+        // need to collect those user res first, then release process_inner
+        // for now to avoid deadlock/double borrow problem.
+        drop(process_inner);
+        recycle_res.clear();
 
+        let mut process_inner = process.inner_exclusive_access();
         process_inner.children.clear();
         // deallocate other data in user space i.e. program code/data section
         process_inner.memory_set.recycle_data_pages();
