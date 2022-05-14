@@ -35,8 +35,6 @@ mod board;
 extern crate log;
 #[macro_use]
 mod console;
-#[macro_use]
-mod logging;
 
 mod config;
 mod lang_items;
@@ -52,7 +50,7 @@ mod mm;
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("link_app.S"));
 
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering,AtomicUsize};
 use core::hint::{spin_loop};
 use core::arch::asm;
 
@@ -71,6 +69,9 @@ fn clear_bss() {
 }
 
 static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
+lazy_static::lazy_static! {
+    static ref BOOTED_CPU_NUM: AtomicUsize = AtomicUsize::new(0);
+}
 
 /// the rust entry-point of os
 #[no_mangle]
@@ -79,21 +80,24 @@ pub fn rust_main(hard_id : usize) -> ! {
     if hard_id == 0{
         clear_bss();
         unsafe{
-            mm::init_heap_allocator();
+            mm::init_heap();
         }
-        logging::init();
-        println!("hart [{:?}] [kernel] Hello, world!", hard_id);
+        console::init();
+        println!("[kernel] Hello, world!");
         trap::init();
         trap::enable_timer_interrupt();
         timer::set_next_trigger();    
         loader::load_apps();
         task::add_user_tasks();
 
-        // AP_CAN_INIT.store(true, Ordering::Relaxed);
+        BOOTED_CPU_NUM.fetch_add(1, Ordering::Release);
+        AP_CAN_INIT.store(true, Ordering::Relaxed);
     }else {
         init_other_cpu();
     }
-
+    
+    wait_all_cpu_started();
+    println!("Hello");
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }
@@ -102,29 +106,33 @@ pub fn rust_main(hard_id : usize) -> ! {
 pub fn init_other_cpu(){
     let hart_id = hart_id();
     if hart_id != 0 {
-        // while !AP_CAN_INIT.load(Ordering::Relaxed) {
-        //     // spin_loop();
-        // }
+        while !AP_CAN_INIT.load(Ordering::Relaxed) {
+            spin_loop();
+        }
         others_main();
         unsafe {
             let sp: usize;
             asm!("mv {}, sp", out(reg) sp);
-            println!("hart[{:?}] init done sp:{:x?}", hart_id,  sp);
+            println!("init done sp:{:x?}",sp);
         }
     }
 }
 
 /// initialize the other cpu main procedure
 pub fn others_main(){
-    clear_bss();
-    unsafe{
-        mm::init_heap_allocator();
-    }
     trap::init();
     trap::enable_timer_interrupt();
-    println!("hard[{:?}] initializing", hart_id());
+    timer::set_next_trigger();
+    BOOTED_CPU_NUM.fetch_add(1, Ordering::Release);
+    println!("initializing");
 }
 
+
+fn wait_all_cpu_started() {
+    while BOOTED_CPU_NUM.load(Ordering::Acquire) < crate::config::CPU_NUM {
+        spin_loop();
+    }
+}
 
 /// Get current cpu id
 pub fn hart_id() -> usize {

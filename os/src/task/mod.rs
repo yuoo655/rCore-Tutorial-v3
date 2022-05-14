@@ -24,13 +24,13 @@ use lazy_static::*;
 use task::{TaskControlBlock, TaskStatus};
 use core::arch::asm;
 use alloc::sync::Arc;
-use spin::Mutex;
+use lock::Mutex;
 use alloc::collections::VecDeque;
 
 pub use context::TaskContext;
 pub use processor::PROCESSORS;
 
-use self::processor::{take_current_task};
+use self::processor::{take_current_task, current_task};
 use self::switch::__switch;
 
 
@@ -70,10 +70,8 @@ impl TaskManager {
 /// add all user task
 pub fn add_user_tasks(){
     for i in 0..4{
-        let task = Arc::new(TaskControlBlock::new());
-        task.acquire_inner_lock().task_cx = TaskContext::goto_restore(init_app_cx(i));
-        task.acquire_inner_lock().task_status = TaskStatus::Ready;
-        add_task(task);
+        let task = Arc::new(TaskControlBlock::new(i));
+        add_task(task.clone());
     }
     println!("add user tasks done");
 }
@@ -117,12 +115,11 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
 
 /// suspend current task switch to idle task
 pub fn suspend_current_and_run_next(){
-    let task = take_current_task().unwrap();
+    let task = current_task().unwrap();
     let mut task_inner = task.acquire_inner_lock();
     task_inner.task_status = TaskStatus::Ready;
     let task_cx_ptr = task_inner.get_task_cx_ptr();
     drop(task_inner);
-    add_task(task);
     schedule(task_cx_ptr);
 }
 

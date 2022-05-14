@@ -1,13 +1,18 @@
 //! Types related to task management
 
 use super::TaskContext;
-use spin::{
+use crate::loader::{
+    init_app_cx,
+};
+
+use lock::{
     Mutex,
     MutexGuard
 };
 
 #[derive(Debug)]
 pub struct TaskControlBlock {
+    app_id : usize,
     inner: Mutex<TaskControlBlockInner>
 }
 
@@ -31,11 +36,13 @@ impl TaskControlBlock{
         self.inner.lock()
     }
 
-    pub fn new() -> Self{
+    pub fn new(app_id:usize) -> Self{
+        let task_cx = TaskContext::goto_restore(init_app_cx(app_id));
         TaskControlBlock{
+            app_id,
             inner: Mutex::new(TaskControlBlockInner{
                 task_status: TaskStatus::UnInit,
-                task_cx: TaskContext::zero_init(),
+                task_cx: task_cx,
             })
         }
     }

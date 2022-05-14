@@ -7,7 +7,8 @@ use super::{
 };
 use super::switch::__switch;
 
-use core::cell::RefCell;
+use lock::Mutex;
+
 use alloc::sync::Arc;
 use core::arch::asm;
 
@@ -20,7 +21,7 @@ lazy_static! {
 }
 
 pub struct Processor {
-    inner: RefCell<ProcessorInner>,
+    inner: Mutex<ProcessorInner>,
 }
 
 pub struct ProcessorInner {
@@ -33,7 +34,7 @@ unsafe impl Sync for Processor {}
 impl Default for Processor {
     fn default() -> Self {
         Self {
-            inner: RefCell::new(ProcessorInner {
+            inner: Mutex::new(ProcessorInner {
                 current: None,
                 idle_task_cx: Default::default(),
             }),
@@ -44,11 +45,11 @@ impl Default for Processor {
 impl Processor {
     pub fn new() -> Self{
         Processor{
-            inner: RefCell::new(ProcessorInner::new())
+            inner: Mutex::new(ProcessorInner::new())
         }
     }
     pub fn get_idle_task_cx_ptr(&self) -> *mut TaskContext {
-        let mut inner = self.inner.borrow_mut();
+        let mut inner = self.inner.lock();
         &mut inner.idle_task_cx as *mut TaskContext
     }
     
@@ -72,7 +73,7 @@ impl Processor {
         task_inner.task_status = TaskStatus::Running(hart_id());
 
         drop(task_inner);
-        self.inner.borrow_mut().current = Some(task);
+        self.inner.lock().current = Some(task);
         unsafe{
             __switch(idle_task_cx_ptr, next_task_cx_ptr);
         }
@@ -84,14 +85,15 @@ impl Processor {
             let mut task_inner = task.acquire_inner_lock();
             task_inner.task_status = TaskStatus::Ready;
             drop(task_inner);
-
-
             add_task(task);
         }
 
     }
     pub fn take_current(&self) -> Option<Arc<TaskControlBlock>> {
-        self.inner.borrow_mut().current.take()
+        self.inner.lock().current.take()
+    }
+    pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
+        self.inner.lock().current.as_ref().map(|task| Arc::clone(task))
     }
 }
 
@@ -100,6 +102,10 @@ pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
     PROCESSORS[hart_id()].take_current()
 }
 
+
+pub fn current_task() -> Option<Arc<TaskControlBlock>> {
+    PROCESSORS[hart_id()].current()
+}
 
 
 impl ProcessorInner {
