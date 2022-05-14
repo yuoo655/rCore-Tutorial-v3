@@ -17,8 +17,8 @@
 //! We then call [`task::run_tasks()`] and for the first time go to
 //! userspace.
 
-#![deny(missing_docs)]
-#![deny(warnings)]
+// #![deny(missing_docs)]
+// #![deny(warnings)]
 
 #![no_std]
 #![no_main]
@@ -66,20 +66,87 @@ fn clear_bss() {
     }
 }
 
+use core::arch::asm;
+use core::sync::atomic::{AtomicBool, Ordering};
+use core::hint::spin_loop;
+static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
+
 #[no_mangle]
-/// the rust entry-point of os
-pub fn rust_main() -> ! {
-    clear_bss();
-    println!("[kernel] Hello, world!");
-    mm::init();
-    mm::remap_test();
-    task::add_initproc();
-    println!("after initproc!");
-    trap::init();
-    //trap::enable_interrupt();
-    trap::enable_timer_interrupt();
-    timer::set_next_trigger();
-    loader::list_apps();
-    task::run_tasks();
+pub fn rust_main(hart_id: usize) -> ! {
+
+    if hart_id == 0 {
+        clear_bss();
+        mm::init();
+        println!("[kernel] Hello, world!");
+        
+        mm::remap_test();
+        task::add_initproc();
+        println!("after initproc!");
+        trap::init();
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
+        loader::list_apps();
+        
+        AP_CAN_INIT.store(true, Ordering::Relaxed);
+    }else {
+        init_other_cpu();
+    }
+    
+    println!("Hello");
+    task::run_tasks(); 
     panic!("Unreachable in rust_main!");
 }
+pub fn init_other_cpu(){
+
+    let hart_id = hart_id();
+
+    if hart_id != 0 {
+        while !AP_CAN_INIT.load(Ordering::Relaxed) {
+            spin_loop();
+        }
+        others_main();
+        unsafe {
+            let sp: usize;
+            asm!("mv {}, sp", out(reg) sp);
+            println!("init done sp: {:#x}",  sp);
+        }
+    }
+}
+
+pub fn others_main(){
+    mm::init_kernel_space();
+    thread_local_init();
+    trap::init();
+    trap::enable_timer_interrupt();
+    timer::set_next_trigger();
+}
+
+pub fn thread_local_init() {
+    unsafe { riscv::register::sstatus::set_sum(); }
+}
+/// Get current cpu id
+pub fn hart_id() -> usize {
+    let hart_id: usize;
+    unsafe {
+        asm!("mv {}, tp", out(reg) hart_id);
+    }
+    hart_id
+}
+
+// #[no_mangle]
+// /// the rust entry-point of os
+// pub fn rust_main() -> ! {
+//     clear_bss();
+//     println!("[kernel] Hello, world!");
+//     mm::init();
+//     mm::remap_test();
+//     task::add_initproc();
+//     println!("after initproc!");
+//     trap::init();
+//     //trap::enable_interrupt();
+//     trap::enable_timer_interrupt();
+//     timer::set_next_trigger();
+//     loader::list_apps();
+//     task::run_tasks();
+//     panic!("Unreachable in rust_main!");
+// }

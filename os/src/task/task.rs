@@ -7,7 +7,7 @@ use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use core::cell::RefMut;
+use spin::MutexGuard;
 
 pub struct TaskControlBlock {
     // immutable
@@ -29,11 +29,9 @@ pub struct TaskControlBlockInner {
 }
 
 impl TaskControlBlockInner {
-    /*
-    pub fn get_task_cx_ptr2(&self) -> *const usize {
-        &self.task_cx_ptr as *const usize
+    pub fn get_task_cx_ptr(&mut self) -> *mut TaskContext {
+        &mut self.task_cx as *mut TaskContext
     }
-    */
     pub fn get_trap_cx(&self) -> &'static mut TrapContext {
         self.trap_cx_ppn.get_mut()
     }
@@ -49,7 +47,7 @@ impl TaskControlBlockInner {
 }
 
 impl TaskControlBlock {
-    pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
+    pub fn inner_exclusive_access(&self) -> MutexGuard<TaskControlBlockInner> {
         self.inner.exclusive_access()
     }
     pub fn new(elf_data: &[u8]) -> Self {
@@ -164,6 +162,6 @@ impl TaskControlBlock {
 #[derive(Copy, Clone, PartialEq)]
 pub enum TaskStatus {
     Ready,
-    Running,
+    Running(usize),
     Zombie,
 }

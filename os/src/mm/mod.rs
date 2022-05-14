@@ -24,3 +24,7 @@ pub fn init() {
     frame_allocator::init_frame_allocator();
     KERNEL_SPACE.exclusive_access().activate();
 }
+
+pub fn init_kernel_space() {
+    KERNEL_SPACE.exclusive_access().activate();
+}

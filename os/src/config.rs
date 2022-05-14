@@ -11,3 +11,4 @@ pub const TRAP_CONTEXT: usize = TRAMPOLINE - PAGE_SIZE;
 
 pub use crate::board::{CLOCK_FREQ, MEMORY_END};
 
+pub const CPU_NUM: usize = 4;
