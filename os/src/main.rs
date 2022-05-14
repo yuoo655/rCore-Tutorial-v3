@@ -49,11 +49,6 @@ pub mod trap;
 
 core::arch::global_asm!(include_str!("entry.asm"));
 core::arch::global_asm!(include_str!("link_app.S"));
-use core::arch::asm;
-
-use core::sync::atomic::{AtomicBool, Ordering};
-use core::hint::spin_loop;
-static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
 
 /// clear BSS segment
 fn clear_bss() {
@@ -67,36 +62,46 @@ fn clear_bss() {
     }
 }
 
+
+use core::sync::atomic::{AtomicBool, Ordering};
+use core::hint::spin_loop;
+use core::arch::asm;
+static AP_CAN_INIT: AtomicBool = AtomicBool::new(false);
+
+
 #[no_mangle]
 /// the rust entry-point of os
-pub fn rust_main(hart_id : usize) -> ! {
-    
-    if hart_id == 0{
+pub fn rust_main(hart_id: usize) -> ! {
+    if hart_id == 0 {
+
         clear_bss();
-        mm::init();
         println!("[kernel] Hello, world!");
+        mm::init();
         println!("[kernel] back to world!");
         mm::remap_test();
-        console::init();
         trap::init();
         //trap::enable_interrupt();
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
-        task::add_user_tasks();
-
-        AP_CAN_INIT.store(true, Ordering::Relaxed);
-
+        
+        
     }else {
         init_other_cpu();
     }
-    task::run_tasks();
+    
+    
+    
+    task::run_first_task();
     panic!("Unreachable in rust_main!");
 }
 
 
+
 /// initialize the other cpu
 pub fn init_other_cpu(){
+
     let hart_id = hart_id();
+
     if hart_id != 0 {
         while !AP_CAN_INIT.load(Ordering::Relaxed) {
             spin_loop();
@@ -105,7 +110,7 @@ pub fn init_other_cpu(){
         unsafe {
             let sp: usize;
             asm!("mv {}, sp", out(reg) sp);
-            println!("hart[{:?}] init done sp:{:x?}", hart_id,  sp);
+            println!("init done sp: {:#x}",  sp);
         }
     }
 }
@@ -115,9 +120,8 @@ pub fn others_main(){
     mm::init_kernel_space();
     trap::init();
     trap::enable_timer_interrupt();
-    println!("hard[{:?}] initializing", hart_id());
+    timer::set_next_trigger();
 }
-
 
 /// Get current cpu id
 pub fn hart_id() -> usize {
