@@ -32,6 +32,11 @@
 <span id="27">27</span>
 <span id="28">28</span>
 <span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
 </pre><pre class="rust"><code><span class="doccomment">//! Memory management implementation</span>
 <span class="doccomment">//! </span>
 <span class="doccomment">//! SV39 page-based virtual-memory architecture for RV64 systems, and</span>
@@ -61,6 +66,10 @@
     <span class="ident">frame_allocator::init_frame_allocator</span>();
     <span class="ident">KERNEL_SPACE</span>.<span class="ident">exclusive_access</span>().<span class="ident">activate</span>();
 }
-</code></pre></div>
+
+<span class="doccomment">/// write to satp</span>
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">init_kernel_space</span>() {
+    <span class="ident">KERNEL_SPACE</span>.<span class="ident">exclusive_access</span>().<span class="ident">activate</span>();
+}</code></pre></div>
 </section><section id="search" class="content hidden"></section></div></main><div id="rustdoc-vars" data-root-path="../../../" data-current-crate="os" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.62.0-nightly (1f7fb6413 2022-04-10)" ></div>
 </body></html>

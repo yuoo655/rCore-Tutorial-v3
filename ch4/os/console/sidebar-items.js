@@ -1,1 +1,1 @@
-initSidebarItems({"fn":[["print",""]],"struct":[["Stdout",""]]});
+initSidebarItems({"fn":[["hart_id",""],["print",""],["print_in_color",""],["putchar",""],["putfmt",""]],"macro":[["with_color","Add escape sequence to print with color in Linux console"]],"struct":[["Console",""]]});
