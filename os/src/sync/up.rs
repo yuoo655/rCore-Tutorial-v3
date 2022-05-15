@@ -23,7 +23,7 @@ impl<T> UPSafeCell<T> {
             inner: Mutex::new(value),
         }
     }
-    /// Exclusive access inner data in UPSafeCell. Panic if the data has been borrowed.
+    /// Panic if the data has been borrowed.
     pub fn exclusive_access(&self) -> MutexGuard<T> {
         self.inner.lock()
     }

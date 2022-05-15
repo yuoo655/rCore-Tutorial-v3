@@ -15,8 +15,8 @@
 //! We then call [`task::run_first_task()`] and for the first time go to
 //! userspace.
 
-#![deny(missing_docs)]
-#![deny(warnings)]
+// #![deny(missing_docs)]
+// #![deny(warnings)]
 #![no_std]
 #![no_main]
 #![feature(panic_info_message)]
@@ -80,22 +80,19 @@ pub fn rust_main(hart_id: usize) -> ! {
         println!("[kernel] back to world!");
         mm::remap_test();
         trap::init();
-        //trap::enable_interrupt();
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
+        task::add_user_tasks();
         
-        
+        AP_CAN_INIT.store(true, Ordering::Relaxed); 
     }else {
         init_other_cpu();
     }
-    
-    
-    
-    task::run_first_task();
+        
+    println!("Hello");
+    task::run_tasks();
     panic!("Unreachable in rust_main!");
 }
-
-
 
 /// initialize the other cpu
 pub fn init_other_cpu(){
