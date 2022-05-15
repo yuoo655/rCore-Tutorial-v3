@@ -47,6 +47,10 @@
 <span id="42">42</span>
 <span id="43">43</span>
 <span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
 </pre><pre class="rust"><code><span class="attribute">#![<span class="ident">allow</span>(<span class="ident">unused</span>)]</span>
 
 <span class="kw">use</span> <span class="ident">core::arch::asm</span>;
@@ -91,6 +95,9 @@
     <span class="ident">sbi_call</span>(<span class="ident">SBI_SHUTDOWN</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>);
     <span class="macro">panic!</span>(<span class="string">&quot;It should shutdown!&quot;</span>);
 }
-</code></pre></div>
+
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">send_ipi</span>(<span class="ident">ptr</span>: <span class="ident">usize</span>) {
+    <span class="ident">sbi_call</span>(<span class="ident">SBI_SEND_IPI</span>, <span class="ident">ptr</span>, <span class="number">0</span>, <span class="number">0</span>);
+}</code></pre></div>
 </section><section id="search" class="content hidden"></section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="os" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.62.0-nightly (1f7fb6413 2022-04-10)" ></div>
 </body></html>
