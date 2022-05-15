@@ -22,6 +22,7 @@ static SUCC_TESTS: &[&str] = &[
     "race_adder_atomic\0",
     "race_adder_mutex_blocking\0",
     "race_adder_mutex_spin\0",
+    "race_adder_arg\0",
     "sleep_simple\0",
     "sleep\0",
     "sleep_simple\0",
@@ -41,8 +42,7 @@ static FAIL_TESTS: &[&str] = &[
     "store_fault\0",
     "until_timeout\0",
     "stack_overflow\0",
-    "race_adder_arg\0",
-    "store_fault\0",
+    "race_adder\0",
     "huge_write_mt\0",
 ];
 
