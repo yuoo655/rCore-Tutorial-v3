@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["condvar",""],["mutex",""],["semaphore",""],["up",""]]});
+initSidebarItems({"mod":[["condvar",""],["ksync",""],["mutex",""],["semaphore",""],["up",""]]});

@@ -25,6 +25,11 @@
 <span id="20">20</span>
 <span id="21">21</span>
 <span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
 </pre><pre class="rust"><code><span class="kw">mod</span> <span class="ident">address</span>;
 <span class="kw">mod</span> <span class="ident">frame_allocator</span>;
 <span class="kw">mod</span> <span class="ident">heap_allocator</span>;
@@ -47,6 +52,10 @@
     <span class="ident">frame_allocator::init_frame_allocator</span>();
     <span class="ident">KERNEL_SPACE</span>.<span class="ident">exclusive_access</span>().<span class="ident">activate</span>();
 }
-</code></pre></div>
+
+
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">init_kernel_space</span>() {
+    <span class="ident">KERNEL_SPACE</span>.<span class="ident">exclusive_access</span>().<span class="ident">activate</span>();
+}</code></pre></div>
 </section><section id="search" class="content hidden"></section></div></main><div id="rustdoc-vars" data-root-path="../../../" data-current-crate="os" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.62.0-nightly (1f7fb6413 2022-04-10)" ></div>
 </body></html>

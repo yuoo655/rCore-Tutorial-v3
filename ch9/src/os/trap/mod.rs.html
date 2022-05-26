@@ -172,6 +172,16 @@
 <span id="167">167</span>
 <span id="168">168</span>
 <span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
 </pre><pre class="rust"><code><span class="kw">mod</span> <span class="ident">context</span>;
 
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::config::TRAMPOLINE</span>;
@@ -185,8 +195,10 @@
 <span class="kw">use</span> <span class="ident">riscv::register</span>::{
     <span class="ident">mtvec::TrapMode</span>,
     <span class="ident">scause</span>::{<span class="self">self</span>, <span class="ident">Exception</span>, <span class="ident">Interrupt</span>, <span class="ident">Trap</span>},
-    <span class="ident">sie</span>, <span class="ident">stval</span>, <span class="ident">stvec</span>, <span class="ident">sstatus</span>, <span class="ident">sscratch</span>,
+    <span class="ident">sie</span>, <span class="ident">stval</span>, <span class="ident">stvec</span>, <span class="ident">sstatus</span>, <span class="ident">sscratch</span>, <span class="ident">sepc</span>
 };
+
+<span class="kw">use</span> <span class="ident">riscv::register::sstatus</span>::{<span class="ident">Sstatus</span>, <span class="ident">SPP</span>};
 
 <span class="macro">global_asm!</span>(<span class="macro">include_str!</span>(<span class="string">&quot;trap.S&quot;</span>));
 
@@ -241,9 +253,7 @@
             <span class="comment">// jump to next instruction anyway</span>
             <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">cx</span> <span class="op">=</span> <span class="ident">current_trap_cx</span>();
             <span class="ident">cx</span>.<span class="ident">sepc</span> <span class="op">+</span><span class="op">=</span> <span class="number">4</span>;
-            
             <span class="ident">enable_supervisor_interrupt</span>();
-
             <span class="comment">// get system call return value</span>
             <span class="kw">let</span> <span class="ident">result</span> <span class="op">=</span> <span class="ident">syscall</span>(<span class="ident">cx</span>.<span class="ident">x</span>[<span class="number">17</span>], [<span class="ident">cx</span>.<span class="ident">x</span>[<span class="number">10</span>], <span class="ident">cx</span>.<span class="ident">x</span>[<span class="number">11</span>], <span class="ident">cx</span>.<span class="ident">x</span>[<span class="number">12</span>]]);
             <span class="comment">// cx is changed during sys_exec, so we have to call it again</span>
@@ -256,14 +266,6 @@
         <span class="op">|</span> <span class="ident">Trap::Exception</span>(<span class="ident">Exception::InstructionPageFault</span>)
         <span class="op">|</span> <span class="ident">Trap::Exception</span>(<span class="ident">Exception::LoadFault</span>)
         <span class="op">|</span> <span class="ident">Trap::Exception</span>(<span class="ident">Exception::LoadPageFault</span>) =&gt; {
-            <span class="comment">/*
-            println!(
-                &quot;[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.&quot;,
-                scause.cause(),
-                stval,
-                current_trap_cx().sepc,
-            );
-            */</span>
             <span class="ident">current_add_signal</span>(<span class="ident">SignalFlags::SIGSEGV</span>);
         }
         <span class="ident">Trap::Exception</span>(<span class="ident">Exception::IllegalInstruction</span>) =&gt; {
@@ -295,8 +297,15 @@
 
 <span class="attribute">#[<span class="ident">no_mangle</span>]</span>
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">trap_return</span>() -&gt; <span class="op">!</span> {
-    <span class="ident">disable_supervisor_interrupt</span>();
+    <span class="comment">// disable_supervisor_interrupt();</span>
+
+    <span class="kw">unsafe</span>{
+        <span class="ident">sstatus::clear_sie</span>(); 
+        <span class="ident">sstatus::set_spie</span>();
+        <span class="ident">sstatus::set_spp</span>(<span class="ident">sstatus::SPP::User</span>);
+    }
     <span class="ident">set_user_trap_entry</span>();
+
     <span class="kw">let</span> <span class="ident">trap_cx_user_va</span> <span class="op">=</span> <span class="ident">current_trap_cx_user_va</span>();
     <span class="kw">let</span> <span class="ident">user_satp</span> <span class="op">=</span> <span class="ident">current_user_token</span>();
     <span class="kw">extern</span> <span class="string">&quot;C&quot;</span> {
@@ -306,6 +315,7 @@
     <span class="kw">let</span> <span class="ident">restore_va</span> <span class="op">=</span> <span class="ident">__restore</span> <span class="kw">as</span> <span class="ident">usize</span> <span class="op">-</span> <span class="ident">__alltraps</span> <span class="kw">as</span> <span class="ident">usize</span> <span class="op">+</span> <span class="ident">TRAMPOLINE</span>;
     <span class="comment">//println!(&quot;before return&quot;);</span>
     <span class="kw">unsafe</span> {
+
         <span class="macro">asm!</span>(
             <span class="string">&quot;fence.i&quot;</span>,
             <span class="string">&quot;jr {restore_va}&quot;</span>,
@@ -319,6 +329,16 @@
 
 <span class="attribute">#[<span class="ident">no_mangle</span>]</span>
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">trap_from_kernel</span>(<span class="ident">_trap_cx</span>: <span class="kw-2">&amp;</span><span class="ident">TrapContext</span>) {
+    <span class="kw">let</span> <span class="ident">local_sepc</span> <span class="op">=</span> <span class="ident">sepc::read</span>();
+    <span class="kw">let</span> <span class="ident">local_sstatus</span> <span class="op">=</span> <span class="ident">sstatus::read</span>();
+
+    <span class="kw">if</span> <span class="ident">local_sstatus</span>.<span class="ident">spp</span>() <span class="op">!</span><span class="op">=</span> <span class="ident">sstatus::SPP::Supervisor</span> {
+        <span class="macro">panic!</span>(<span class="string">&quot;not from supervisor mode&quot;</span>);
+    }
+    <span class="kw">if</span> <span class="ident">local_sstatus</span>.<span class="ident">sie</span>() <span class="op">==</span> <span class="bool-val">true</span>{
+        <span class="macro">panic!</span>(<span class="string">&quot;interrupts enabled&quot;</span>);
+    }
+
     <span class="kw">let</span> <span class="ident">scause</span> <span class="op">=</span> <span class="ident">scause::read</span>();
     <span class="kw">let</span> <span class="ident">stval</span> <span class="op">=</span> <span class="ident">stval::read</span>();
     <span class="kw">match</span> <span class="ident">scause</span>.<span class="ident">cause</span>() {

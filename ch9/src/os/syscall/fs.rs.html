@@ -104,12 +104,12 @@
 <span id="99">99</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::fs</span>::{<span class="ident">make_pipe</span>, <span class="ident">open_file</span>, <span class="ident">OpenFlags</span>};
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::mm</span>::{<span class="ident">translated_byte_buffer</span>, <span class="ident">translated_refmut</span>, <span class="ident">translated_str</span>, <span class="ident">UserBuffer</span>};
-<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::task</span>::{<span class="ident">current_process</span>, <span class="ident">current_user_token</span>};
+<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::task</span>::{<span class="ident">current_user_token</span>, <span class="ident">current_task</span>, <span class="ident">current_trap_cx</span>};
 <span class="kw">use</span> <span class="ident">alloc::sync::Arc</span>;
 
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sys_write</span>(<span class="ident">fd</span>: <span class="ident">usize</span>, <span class="ident">buf</span>: <span class="kw-2">*const</span> <span class="ident">u8</span>, <span class="ident">len</span>: <span class="ident">usize</span>) -&gt; <span class="ident">isize</span> {
     <span class="kw">let</span> <span class="ident">token</span> <span class="op">=</span> <span class="ident">current_user_token</span>();
-    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_process</span>();
+    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_task</span>().<span class="ident">unwrap</span>();
     <span class="kw">let</span> <span class="ident">inner</span> <span class="op">=</span> <span class="ident">process</span>.<span class="ident">inner_exclusive_access</span>();
     <span class="kw">if</span> <span class="ident">fd</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">inner</span>.<span class="ident">fd_table</span>.<span class="ident">len</span>() {
         <span class="kw">return</span> <span class="op">-</span><span class="number">1</span>;
@@ -129,7 +129,7 @@
 
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sys_read</span>(<span class="ident">fd</span>: <span class="ident">usize</span>, <span class="ident">buf</span>: <span class="kw-2">*const</span> <span class="ident">u8</span>, <span class="ident">len</span>: <span class="ident">usize</span>) -&gt; <span class="ident">isize</span> {
     <span class="kw">let</span> <span class="ident">token</span> <span class="op">=</span> <span class="ident">current_user_token</span>();
-    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_process</span>();
+    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_task</span>().<span class="ident">unwrap</span>();
     <span class="kw">let</span> <span class="ident">inner</span> <span class="op">=</span> <span class="ident">process</span>.<span class="ident">inner_exclusive_access</span>();
     <span class="kw">if</span> <span class="ident">fd</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">inner</span>.<span class="ident">fd_table</span>.<span class="ident">len</span>() {
         <span class="kw">return</span> <span class="op">-</span><span class="number">1</span>;
@@ -148,7 +148,7 @@
 }
 
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sys_open</span>(<span class="ident">path</span>: <span class="kw-2">*const</span> <span class="ident">u8</span>, <span class="ident">flags</span>: <span class="ident">u32</span>) -&gt; <span class="ident">isize</span> {
-    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_process</span>();
+    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_task</span>().<span class="ident">unwrap</span>();
     <span class="kw">let</span> <span class="ident">token</span> <span class="op">=</span> <span class="ident">current_user_token</span>();
     <span class="kw">let</span> <span class="ident">path</span> <span class="op">=</span> <span class="ident">translated_str</span>(<span class="ident">token</span>, <span class="ident">path</span>);
     <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">inode</span>) <span class="op">=</span> <span class="ident">open_file</span>(<span class="ident">path</span>.<span class="ident">as_str</span>(), <span class="ident">OpenFlags::from_bits</span>(<span class="ident">flags</span>).<span class="ident">unwrap</span>()) {
@@ -162,7 +162,7 @@
 }
 
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sys_close</span>(<span class="ident">fd</span>: <span class="ident">usize</span>) -&gt; <span class="ident">isize</span> {
-    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_process</span>();
+    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_task</span>().<span class="ident">unwrap</span>();
     <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="ident">process</span>.<span class="ident">inner_exclusive_access</span>();
     <span class="kw">if</span> <span class="ident">fd</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">inner</span>.<span class="ident">fd_table</span>.<span class="ident">len</span>() {
         <span class="kw">return</span> <span class="op">-</span><span class="number">1</span>;
@@ -175,7 +175,7 @@
 }
 
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sys_pipe</span>(<span class="ident">pipe</span>: <span class="kw-2">*mut</span> <span class="ident">usize</span>) -&gt; <span class="ident">isize</span> {
-    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_process</span>();
+    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_task</span>().<span class="ident">unwrap</span>();
     <span class="kw">let</span> <span class="ident">token</span> <span class="op">=</span> <span class="ident">current_user_token</span>();
     <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="ident">process</span>.<span class="ident">inner_exclusive_access</span>();
     <span class="kw">let</span> (<span class="ident">pipe_read</span>, <span class="ident">pipe_write</span>) <span class="op">=</span> <span class="ident">make_pipe</span>();
@@ -189,7 +189,7 @@
 }
 
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sys_dup</span>(<span class="ident">fd</span>: <span class="ident">usize</span>) -&gt; <span class="ident">isize</span> {
-    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_process</span>();
+    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">current_task</span>().<span class="ident">unwrap</span>();
     <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="ident">process</span>.<span class="ident">inner_exclusive_access</span>();
     <span class="kw">if</span> <span class="ident">fd</span> <span class="op">&gt;</span><span class="op">=</span> <span class="ident">inner</span>.<span class="ident">fd_table</span>.<span class="ident">len</span>() {
         <span class="kw">return</span> <span class="op">-</span><span class="number">1</span>;

@@ -1,1 +1,1 @@
-initSidebarItems({"fn":[["backtrace",""],["panic",""]]});
+initSidebarItems({"fn":[["panic",""]]});

@@ -48,12 +48,14 @@
 <span id="43">43</span>
 <span id="44">44</span>
 <span id="45">45</span>
+<span id="46">46</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::sync::UPIntrFreeCell</span>;
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::task</span>::{<span class="ident">add_task</span>, <span class="ident">block_current_and_run_next</span>, <span class="ident">current_task</span>, <span class="ident">TaskControlBlock</span>};
 <span class="kw">use</span> <span class="ident">alloc</span>::{<span class="ident">collections::VecDeque</span>, <span class="ident">sync::Arc</span>};
+<span class="kw">use</span> <span class="ident">lock::Mutex</span>;
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Semaphore</span> {
-    <span class="kw">pub</span> <span class="ident">inner</span>: <span class="ident">UPIntrFreeCell</span><span class="op">&lt;</span><span class="ident">SemaphoreInner</span><span class="op">&gt;</span>,
+    <span class="kw">pub</span> <span class="ident">inner</span>: <span class="ident">Mutex</span><span class="op">&lt;</span><span class="ident">SemaphoreInner</span><span class="op">&gt;</span>,
 }
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">SemaphoreInner</span> {
@@ -65,7 +67,7 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">res_count</span>: <span class="ident">usize</span>) -&gt; <span class="self">Self</span> {
         <span class="self">Self</span> {
             <span class="ident">inner</span>: <span class="kw">unsafe</span> {
-                <span class="ident">UPIntrFreeCell::new</span>(<span class="ident">SemaphoreInner</span> {
+                <span class="ident">Mutex::new</span>(<span class="ident">SemaphoreInner</span> {
                     <span class="ident">count</span>: <span class="ident">res_count</span> <span class="kw">as</span> <span class="ident">isize</span>,
                     <span class="ident">wait_queue</span>: <span class="ident">VecDeque::new</span>(),
                 })
@@ -74,7 +76,7 @@
     }
 
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">up</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">exclusive_access</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">lock</span>();
         <span class="ident">inner</span>.<span class="ident">count</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
         <span class="kw">if</span> <span class="ident">inner</span>.<span class="ident">count</span> <span class="op">&lt;</span><span class="op">=</span> <span class="number">0</span> {
             <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">task</span>) <span class="op">=</span> <span class="ident">inner</span>.<span class="ident">wait_queue</span>.<span class="ident">pop_front</span>() {
@@ -84,7 +86,7 @@
     }
 
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">down</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">exclusive_access</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">lock</span>();
         <span class="ident">inner</span>.<span class="ident">count</span> <span class="op">-</span><span class="op">=</span> <span class="number">1</span>;
         <span class="kw">if</span> <span class="ident">inner</span>.<span class="ident">count</span> <span class="op">&lt;</span> <span class="number">0</span> {
             <span class="ident">inner</span>.<span class="ident">wait_queue</span>.<span class="ident">push_back</span>(<span class="ident">current_task</span>().<span class="ident">unwrap</span>());

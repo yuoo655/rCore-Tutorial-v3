@@ -72,106 +72,74 @@
 <span id="67">67</span>
 <span id="68">68</span>
 <span id="69">69</span>
-<span id="70">70</span>
-<span id="71">71</span>
-<span id="72">72</span>
-<span id="73">73</span>
-<span id="74">74</span>
-<span id="75">75</span>
-<span id="76">76</span>
-<span id="77">77</span>
-<span id="78">78</span>
-<span id="79">79</span>
-<span id="80">80</span>
-<span id="81">81</span>
-<span id="82">82</span>
-<span id="83">83</span>
-<span id="84">84</span>
-<span id="85">85</span>
 </pre><pre class="rust"><code><span class="kw">use</span> <span class="kw">crate</span>::{
     <span class="ident">mm::kernel_token</span>,
     <span class="ident">task</span>::{<span class="ident">add_task</span>, <span class="ident">current_task</span>, <span class="ident">TaskControlBlock</span>},
     <span class="ident">trap</span>::{<span class="ident">trap_handler</span>, <span class="ident">TrapContext</span>},
 };
-<span class="kw">use</span> <span class="ident">alloc::sync::Arc</span>;
+<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::task</span>::{
+    <span class="ident">add_task_first_time</span>,
+    <span class="ident">pid2task</span>,
+    <span class="ident">trap_cx_bottom_from_pid</span>,
+    <span class="ident">remove_from_pid2task</span>
+};
+
 
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sys_thread_create</span>(<span class="ident">entry</span>: <span class="ident">usize</span>, <span class="ident">arg</span>: <span class="ident">usize</span>) -&gt; <span class="ident">isize</span> {
-    <span class="kw">let</span> <span class="ident">task</span> <span class="op">=</span> <span class="ident">current_task</span>().<span class="ident">unwrap</span>();
-    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">task</span>.<span class="ident">process</span>.<span class="ident">upgrade</span>().<span class="ident">unwrap</span>();
-    <span class="comment">// create a new thread</span>
-    <span class="kw">let</span> <span class="ident">new_task</span> <span class="op">=</span> <span class="ident">Arc::new</span>(<span class="ident">TaskControlBlock::new</span>(
-        <span class="ident">Arc::clone</span>(<span class="kw-2">&amp;</span><span class="ident">process</span>),
-        <span class="ident">task</span>.<span class="ident">inner_exclusive_access</span>()
-            .<span class="ident">res</span>
-            .<span class="ident">as_ref</span>()
-            .<span class="ident">unwrap</span>()
-            .<span class="ident">ustack_base</span>,
-        <span class="bool-val">true</span>,
-    ));
+    <span class="kw">let</span> <span class="ident">current_task</span> <span class="op">=</span> <span class="ident">current_task</span>().<span class="ident">unwrap</span>();
+    <span class="kw">let</span> <span class="ident">current_pid</span> <span class="op">=</span> <span class="ident">current_task</span>.<span class="ident">pid</span>.<span class="number">0</span>;
+
+    <span class="kw">let</span> <span class="ident">new_task</span> <span class="op">=</span> <span class="ident">current_task</span>.<span class="ident">new_user_thread</span>(<span class="ident">entry</span>, <span class="ident">arg</span>, <span class="ident">current_pid</span>);
+
+    <span class="kw">let</span> <span class="ident">new_pid</span> <span class="op">=</span> <span class="ident">new_task</span>.<span class="ident">pid</span>.<span class="number">0</span>;
+
+    <span class="kw">let</span> <span class="ident">cx</span> <span class="op">=</span> <span class="ident">trap_cx_bottom_from_pid</span>(<span class="ident">new_pid</span>);
+    <span class="comment">// println!(&quot;cx: {:#x}&quot;, cx);</span>
     <span class="comment">// add new task to scheduler</span>
-    <span class="ident">add_task</span>(<span class="ident">Arc::clone</span>(<span class="kw-2">&amp;</span><span class="ident">new_task</span>));
-    <span class="kw">let</span> <span class="ident">new_task_inner</span> <span class="op">=</span> <span class="ident">new_task</span>.<span class="ident">inner_exclusive_access</span>();
-    <span class="kw">let</span> <span class="ident">new_task_res</span> <span class="op">=</span> <span class="ident">new_task_inner</span>.<span class="ident">res</span>.<span class="ident">as_ref</span>().<span class="ident">unwrap</span>();
-    <span class="kw">let</span> <span class="ident">new_task_tid</span> <span class="op">=</span> <span class="ident">new_task_res</span>.<span class="ident">tid</span>;
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">process_inner</span> <span class="op">=</span> <span class="ident">process</span>.<span class="ident">inner_exclusive_access</span>();
-    <span class="comment">// add new thread to current process</span>
-    <span class="kw">let</span> <span class="ident">tasks</span> <span class="op">=</span> <span class="kw-2">&amp;mut</span> <span class="ident">process_inner</span>.<span class="ident">tasks</span>;
-    <span class="kw">while</span> <span class="ident">tasks</span>.<span class="ident">len</span>() <span class="op">&lt;</span> <span class="ident">new_task_tid</span> <span class="op">+</span> <span class="number">1</span> {
-        <span class="ident">tasks</span>.<span class="ident">push</span>(<span class="prelude-val">None</span>);
-    }
-    <span class="ident">tasks</span>[<span class="ident">new_task_tid</span>] <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">Arc::clone</span>(<span class="kw-2">&amp;</span><span class="ident">new_task</span>));
-    <span class="kw">let</span> <span class="ident">new_task_trap_cx</span> <span class="op">=</span> <span class="ident">new_task_inner</span>.<span class="ident">get_trap_cx</span>();
-    <span class="kw-2">*</span><span class="ident">new_task_trap_cx</span> <span class="op">=</span> <span class="ident">TrapContext::app_init_context</span>(
-        <span class="ident">entry</span>,
-        <span class="ident">new_task_res</span>.<span class="ident">ustack_top</span>(),
-        <span class="ident">kernel_token</span>(),
-        <span class="ident">new_task</span>.<span class="ident">kstack</span>.<span class="ident">get_top</span>(),
-        <span class="ident">trap_handler</span> <span class="kw">as</span> <span class="ident">usize</span>,
-    );
-    (<span class="kw-2">*</span><span class="ident">new_task_trap_cx</span>).<span class="ident">x</span>[<span class="number">10</span>] <span class="op">=</span> <span class="ident">arg</span>;
-    <span class="ident">new_task_tid</span> <span class="kw">as</span> <span class="ident">isize</span>
+    <span class="ident">add_task_first_time</span>(<span class="ident">new_task</span>.<span class="ident">clone</span>());
+    <span class="ident">drop</span>(<span class="ident">current_task</span>);
+    <span class="ident">drop</span>(<span class="ident">new_task</span>);
+
+    <span class="ident">new_pid</span> <span class="kw">as</span> <span class="ident">isize</span> 
 }
 
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sys_gettid</span>() -&gt; <span class="ident">isize</span> {
-    <span class="ident">current_task</span>()
-        .<span class="ident">unwrap</span>()
-        .<span class="ident">inner_exclusive_access</span>()
-        .<span class="ident">res</span>
-        .<span class="ident">as_ref</span>()
-        .<span class="ident">unwrap</span>()
-        .<span class="ident">tid</span> <span class="kw">as</span> <span class="ident">isize</span>
+    <span class="kw">let</span> <span class="ident">task</span> <span class="op">=</span> <span class="ident">current_task</span>().<span class="ident">unwrap</span>();
+    <span class="ident">task</span>.<span class="ident">pid</span>.<span class="number">0</span> <span class="kw">as</span> <span class="ident">isize</span>
 }
 
 <span class="doccomment">/// thread does not exist, return -1</span>
 <span class="doccomment">/// thread has not exited yet, return -2</span>
 <span class="doccomment">/// otherwise, return thread&#39;s exit code</span>
-<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sys_waittid</span>(<span class="ident">tid</span>: <span class="ident">usize</span>) -&gt; <span class="ident">i32</span> {
-    <span class="kw">let</span> <span class="ident">task</span> <span class="op">=</span> <span class="ident">current_task</span>().<span class="ident">unwrap</span>();
-    <span class="kw">let</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">task</span>.<span class="ident">process</span>.<span class="ident">upgrade</span>().<span class="ident">unwrap</span>();
-    <span class="kw">let</span> <span class="ident">task_inner</span> <span class="op">=</span> <span class="ident">task</span>.<span class="ident">inner_exclusive_access</span>();
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">process_inner</span> <span class="op">=</span> <span class="ident">process</span>.<span class="ident">inner_exclusive_access</span>();
-    <span class="comment">// a thread cannot wait for itself</span>
-    <span class="kw">if</span> <span class="ident">task_inner</span>.<span class="ident">res</span>.<span class="ident">as_ref</span>().<span class="ident">unwrap</span>().<span class="ident">tid</span> <span class="op">==</span> <span class="ident">tid</span> {
-        <span class="kw">return</span> <span class="op">-</span><span class="number">1</span>;
-    }
-    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">exit_code</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">i32</span><span class="op">&gt;</span> <span class="op">=</span> <span class="prelude-val">None</span>;
-    <span class="kw">let</span> <span class="ident">waited_task</span> <span class="op">=</span> <span class="ident">process_inner</span>.<span class="ident">tasks</span>[<span class="ident">tid</span>].<span class="ident">as_ref</span>();
-    <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">waited_task</span>) <span class="op">=</span> <span class="ident">waited_task</span> {
-        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">waited_exit_code</span>) <span class="op">=</span> <span class="ident">waited_task</span>.<span class="ident">inner_exclusive_access</span>().<span class="ident">exit_code</span> {
-            <span class="ident">exit_code</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">waited_exit_code</span>);
+<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">sys_waittid</span>(<span class="ident">pid</span>: <span class="ident">usize</span>) -&gt; <span class="ident">i32</span> {
+
+    <span class="kw">let</span> <span class="ident">waited_task</span> <span class="op">=</span> <span class="ident">pid2task</span>(<span class="ident">pid</span>);
+
+
+    <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">task</span>) <span class="op">=</span> <span class="ident">waited_task</span> {
+        <span class="kw">let</span> <span class="ident">pid</span> <span class="op">=</span> <span class="ident">task</span>.<span class="ident">pid</span>.<span class="number">0</span>;
+        <span class="kw">let</span> <span class="ident">tgid</span> <span class="op">=</span> <span class="ident">task</span>.<span class="ident">tgid</span>;
+
+        <span class="kw">if</span> <span class="ident">pid</span> <span class="op">==</span> <span class="ident">tgid</span> {
+            <span class="comment">// main thread cannot be waited</span>
+            <span class="kw">return</span> <span class="op">-</span><span class="number">1</span>;
         }
-    } <span class="kw">else</span> {
-        <span class="comment">// waited thread does not exist</span>
-        <span class="kw">return</span> <span class="op">-</span><span class="number">1</span>;
+
+        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">waited_exit_code</span>)  <span class="op">=</span> <span class="ident">task</span>.<span class="ident">inner_exclusive_access</span>().<span class="ident">exit_code</span> {
+
+            <span class="comment">// thread has exited</span>
+            <span class="kw">return</span> <span class="ident">waited_exit_code</span>;
+
+        }<span class="kw">else</span> {
+            <span class="comment">// thread has not exited yet</span>
+            <span class="op">-</span><span class="number">2</span> 
+        }
+
+    }<span class="kw">else</span>{
+        <span class="comment">// cannot find thread</span>
+        <span class="op">-</span><span class="number">1</span>
     }
-    <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">exit_code</span>) <span class="op">=</span> <span class="ident">exit_code</span> {
-        <span class="comment">// dealloc the exited thread</span>
-        <span class="ident">process_inner</span>.<span class="ident">tasks</span>[<span class="ident">tid</span>] <span class="op">=</span> <span class="prelude-val">None</span>;
-        <span class="ident">exit_code</span>
-    } <span class="kw">else</span> {
-        <span class="comment">// waited thread has not exited</span>
-        <span class="op">-</span><span class="number">2</span>
-    }
+
 }
 </code></pre></div>
 </section><section id="search" class="content hidden"></section></div></main><div id="rustdoc-vars" data-root-path="../../../" data-current-crate="os" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.62.0-nightly (1f7fb6413 2022-04-10)" ></div>

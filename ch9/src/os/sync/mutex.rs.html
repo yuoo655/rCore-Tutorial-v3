@@ -103,13 +103,13 @@
 }
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">MutexSpin</span> {
-    <span class="ident">locked</span>: <span class="ident">UPIntrFreeCell</span><span class="op">&lt;</span><span class="ident">bool</span><span class="op">&gt;</span>,
+    <span class="ident">locked</span>: <span class="ident">lock::Mutex</span><span class="op">&lt;</span><span class="ident">bool</span><span class="op">&gt;</span>,
 }
 
 <span class="kw">impl</span> <span class="ident">MutexSpin</span> {
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>() -&gt; <span class="self">Self</span> {
         <span class="self">Self</span> {
-            <span class="ident">locked</span>: <span class="kw">unsafe</span> { <span class="ident">UPIntrFreeCell::new</span>(<span class="bool-val">false</span>) },
+            <span class="ident">locked</span>: <span class="kw">unsafe</span> { <span class="ident">lock::Mutex::new</span>(<span class="bool-val">false</span>) },
         }
     }
 }
@@ -117,7 +117,7 @@
 <span class="kw">impl</span> <span class="ident">Mutex</span> <span class="kw">for</span> <span class="ident">MutexSpin</span> {
     <span class="kw">fn</span> <span class="ident">lock</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) {
         <span class="kw">loop</span> {
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">locked</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">locked</span>.<span class="ident">exclusive_access</span>();
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">locked</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">locked</span>.<span class="ident">lock</span>();
             <span class="kw">if</span> <span class="kw-2">*</span><span class="ident">locked</span> {
                 <span class="ident">drop</span>(<span class="ident">locked</span>);
                 <span class="ident">suspend_current_and_run_next</span>();
@@ -130,13 +130,13 @@
     }
 
     <span class="kw">fn</span> <span class="ident">unlock</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">locked</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">locked</span>.<span class="ident">exclusive_access</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">locked</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">locked</span>.<span class="ident">lock</span>();
         <span class="kw-2">*</span><span class="ident">locked</span> <span class="op">=</span> <span class="bool-val">false</span>;
     }
 }
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">MutexBlocking</span> {
-    <span class="ident">inner</span>: <span class="ident">UPIntrFreeCell</span><span class="op">&lt;</span><span class="ident">MutexBlockingInner</span><span class="op">&gt;</span>,
+    <span class="ident">inner</span>: <span class="ident">lock::Mutex</span><span class="op">&lt;</span><span class="ident">MutexBlockingInner</span><span class="op">&gt;</span>,
 }
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">MutexBlockingInner</span> {
@@ -148,7 +148,7 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>() -&gt; <span class="self">Self</span> {
         <span class="self">Self</span> {
             <span class="ident">inner</span>: <span class="kw">unsafe</span> {
-                <span class="ident">UPIntrFreeCell::new</span>(<span class="ident">MutexBlockingInner</span> {
+                <span class="ident">lock::Mutex::new</span>(<span class="ident">MutexBlockingInner</span> {
                     <span class="ident">locked</span>: <span class="bool-val">false</span>,
                     <span class="ident">wait_queue</span>: <span class="ident">VecDeque::new</span>(),
                 })
@@ -159,7 +159,7 @@
 
 <span class="kw">impl</span> <span class="ident">Mutex</span> <span class="kw">for</span> <span class="ident">MutexBlocking</span> {
     <span class="kw">fn</span> <span class="ident">lock</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mutex_inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">exclusive_access</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mutex_inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">lock</span>();
         <span class="kw">if</span> <span class="ident">mutex_inner</span>.<span class="ident">locked</span> {
             <span class="ident">mutex_inner</span>.<span class="ident">wait_queue</span>.<span class="ident">push_back</span>(<span class="ident">current_task</span>().<span class="ident">unwrap</span>());
             <span class="ident">drop</span>(<span class="ident">mutex_inner</span>);
@@ -170,7 +170,7 @@
     }
 
     <span class="kw">fn</span> <span class="ident">unlock</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mutex_inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">exclusive_access</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">mutex_inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">lock</span>();
         <span class="macro">assert!</span>(<span class="ident">mutex_inner</span>.<span class="ident">locked</span>);
         <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">waking_task</span>) <span class="op">=</span> <span class="ident">mutex_inner</span>.<span class="ident">wait_queue</span>.<span class="ident">pop_front</span>() {
             <span class="ident">add_task</span>(<span class="ident">waking_task</span>);

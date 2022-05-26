@@ -57,13 +57,13 @@
 <span id="52">52</span>
 <span id="53">53</span>
 <span id="54">54</span>
-<span id="55">55</span>
-</pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::sync</span>::{<span class="ident">Mutex</span>, <span class="ident">UPIntrFreeCell</span>};
-<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::task</span>::{<span class="ident">add_task</span>, <span class="ident">block_current_task</span>, <span class="ident">block_current_and_run_next</span>, <span class="ident">current_task</span>, <span class="ident">TaskControlBlock</span>, <span class="ident">TaskContext</span>};
+</pre><pre class="rust"><code><span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::task</span>::{<span class="ident">add_task</span>, <span class="ident">block_current_task</span>, <span class="ident">block_current_and_run_next</span>, <span class="ident">current_task</span>, <span class="ident">TaskControlBlock</span>, <span class="ident">TaskContext</span>};
 <span class="kw">use</span> <span class="ident">alloc</span>::{<span class="ident">collections::VecDeque</span>, <span class="ident">sync::Arc</span>};
+<span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::sync</span>::{<span class="ident">Mutex</span>, <span class="ident">UPSafeCell</span>};
+<span class="comment">// use super::Mutex;</span>
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Condvar</span> {
-    <span class="kw">pub</span> <span class="ident">inner</span>: <span class="ident">UPIntrFreeCell</span><span class="op">&lt;</span><span class="ident">CondvarInner</span><span class="op">&gt;</span>,
+    <span class="kw">pub</span> <span class="ident">inner</span>: <span class="ident">UPSafeCell</span><span class="op">&lt;</span><span class="ident">CondvarInner</span><span class="op">&gt;</span>,
 }
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">CondvarInner</span> {
@@ -74,7 +74,7 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>() -&gt; <span class="self">Self</span> {
         <span class="self">Self</span> {
             <span class="ident">inner</span>: <span class="kw">unsafe</span> {
-                <span class="ident">UPIntrFreeCell::new</span>(<span class="ident">CondvarInner</span> {
+                <span class="ident">UPSafeCell::new</span>(<span class="ident">CondvarInner</span> {
                     <span class="ident">wait_queue</span>: <span class="ident">VecDeque::new</span>(),
                 })
             },
@@ -88,29 +88,27 @@
         }
     }
 
-    <span class="comment">/*
-    pub fn wait(&amp;self) {
-        let mut inner = self.inner.exclusive_access();
-        inner.wait_queue.push_back(current_task().unwrap());
-        drop(inner);
-        block_current_and_run_next();
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">wait</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">mutex</span>: <span class="ident">Arc</span><span class="op">&lt;</span><span class="kw">dyn</span> <span class="ident">Mutex</span><span class="op">&gt;</span>) {
+        <span class="ident">mutex</span>.<span class="ident">unlock</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">exclusive_access</span>();
+        <span class="ident">inner</span>.<span class="ident">wait_queue</span>.<span class="ident">push_back</span>(<span class="ident">current_task</span>().<span class="ident">unwrap</span>());
+        <span class="ident">drop</span>(<span class="ident">inner</span>);
+        <span class="ident">block_current_and_run_next</span>();
+        <span class="ident">mutex</span>.<span class="ident">lock</span>();
     }
-    */</span>
 
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">wait_no_sched</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">*mut</span> <span class="ident">TaskContext</span> {
-        <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">exclusive_session</span>(<span class="op">|</span><span class="ident">inner</span><span class="op">|</span> {
-            <span class="ident">inner</span>.<span class="ident">wait_queue</span>.<span class="ident">push_back</span>(<span class="ident">current_task</span>().<span class="ident">unwrap</span>());
-        });
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">exclusive_access</span>();
+        <span class="ident">inner</span>.<span class="ident">wait_queue</span>.<span class="ident">push_back</span>(<span class="ident">current_task</span>().<span class="ident">unwrap</span>());
         <span class="ident">block_current_task</span>()
     }
 
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">wait_with_mutex</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">mutex</span>: <span class="ident">Arc</span><span class="op">&lt;</span><span class="kw">dyn</span> <span class="ident">Mutex</span><span class="op">&gt;</span>) {
-        <span class="ident">mutex</span>.<span class="ident">unlock</span>();
-        <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">exclusive_session</span>(<span class="op">|</span><span class="ident">inner</span><span class="op">|</span> {
-            <span class="ident">inner</span>.<span class="ident">wait_queue</span>.<span class="ident">push_back</span>(<span class="ident">current_task</span>().<span class="ident">unwrap</span>());
-        });
-        <span class="ident">block_current_and_run_next</span>();
         <span class="ident">mutex</span>.<span class="ident">lock</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">inner</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">inner</span>.<span class="ident">exclusive_access</span>();
+        <span class="ident">inner</span>.<span class="ident">wait_queue</span>.<span class="ident">push_back</span>(<span class="ident">current_task</span>().<span class="ident">unwrap</span>());
+        <span class="ident">block_current_and_run_next</span>();
+        <span class="ident">mutex</span>.<span class="ident">unlock</span>();
     }
 }
 </code></pre></div>

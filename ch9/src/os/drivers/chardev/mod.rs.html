@@ -20,6 +20,7 @@
 <span id="15">15</span>
 <span id="16">16</span>
 <span id="17">17</span>
+<span id="18">18</span>
 </pre><pre class="rust"><code><span class="kw">mod</span> <span class="ident">ns16550a</span>;
 
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">ns16550a::NS16550a</span>;
@@ -27,6 +28,7 @@
 <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::board::CharDeviceImpl</span>;
 <span class="kw">use</span> <span class="ident">alloc::sync::Arc</span>;
 <span class="kw">use</span> <span class="ident">lazy_static</span>::<span class="kw-2">*</span>;
+<span class="kw">use</span> <span class="ident">lock::Mutex</span>;
 
 <span class="kw">pub</span> <span class="kw">trait</span> <span class="ident">CharDevice</span> {
     <span class="kw">fn</span> <span class="ident">read</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="ident">u8</span>;
