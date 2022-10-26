@@ -1,1 +1,1 @@
-initSidebarItems({"mod":[["condvar",""],["ksync",""],["mutex",""],["semaphore",""],["up",""]]});
+window.SIDEBAR_ITEMS = {"mod":[["condvar",""],["ksync",""],["mutex",""],["semaphore",""],["up",""]]};

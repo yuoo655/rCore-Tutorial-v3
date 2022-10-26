@@ -1,1 +1,1 @@
-initSidebarItems({"fn":[["k_condvar_create",""],["k_condvar_signal",""],["k_condvar_wait",""],["k_mutex_create",""],["k_mutex_lock",""],["k_mutex_unlock",""],["k_semaphore_create",""],["k_semaphore_down",""],["k_semaphore_up",""],["k_sleep",""]]});
+window.SIDEBAR_ITEMS = {"fn":[["k_condvar_create",""],["k_condvar_signal",""],["k_condvar_wait",""],["k_mutex_create",""],["k_mutex_lock",""],["k_mutex_unlock",""],["k_semaphore_create",""],["k_semaphore_down",""],["k_semaphore_up",""],["k_sleep",""]]};

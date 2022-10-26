@@ -1,1 +1,1 @@
-initSidebarItems({"fn":[["insert_into_pid2task",""],["pid2task",""],["remove_from_pid2task",""]],"struct":[["PID2TCB",""],["TaskManager",""]]});
+window.SIDEBAR_ITEMS = {"fn":[["insert_into_pid2task",""],["pid2task",""],["remove_from_pid2task",""]],"struct":[["PID2TCB",""],["TaskManager",""]]};
